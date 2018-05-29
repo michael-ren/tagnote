@@ -7,12 +7,14 @@ from argparse import ArgumentParser, Namespace
 from collections import OrderedDict
 from re import compile
 from sys import stdout, argv
-from typing import Sequence
+from typing import Sequence, Iterator, Optional, Callable, Mapping, Any
 from pathlib import Path
 
 
-DB_FILE = Path("./tags.sqlite")
-NOTES_DIRECTORY = Path(".")
+class Properties:
+    DB_FILE = Path("./tags.sqlite")
+
+    NOTES_DIRECTORY = Path(".")
 
 
 class TagType(Enum):
@@ -34,6 +36,47 @@ class Tag:
         raise ValueError("No tag type found for '{}'".format(value))
 
 
+def insert_new_key(mapping: dict, key: Any, value: Any) -> None:
+    if key in mapping:
+        raise RuntimeError(
+            "Key already in mapping {}: {}".format(mapping, key)
+        )
+    else:
+        mapping[key] = value
+
+
+def generate_query(
+        query: str,
+        dynamic_args: Optional[Mapping[str, Any]]=None
+        ) -> Callable[[Cursor], Iterator[Row]]:
+    dynamic_args = dynamic_args or {}
+
+    params = {}
+    args = {}
+
+    for key, value in dynamic_args.items():
+        if not isinstance(value, str) and isinstance(value, Sequence):
+            insert_new_key(
+                params,
+                key,
+                ",".join(
+                    ":" + key + str(i) for i in range(len(value))
+                )
+            )
+            for i, item in enumerate(value):
+                insert_new_key(args, key + str(i), item)
+        else:
+            insert_new_key(params, key, ":" + key)
+            insert_new_key(args, key, value)
+    formatted = query.format(**params)
+
+    def execute(cursor: Cursor) -> Iterator[Row]:
+        cursor.execute(formatted, args)
+        return (row for row in cursor)
+
+    return execute
+
+
 class Command(metaclass=ABCMeta):
     @classmethod
     @abstractmethod
@@ -51,8 +94,7 @@ class Init(Command):
         "create table if not exists tags ("
         "    id integer primary key not null,"
         "    name text unique not null,"
-        "    type not null references tag_types(id),"
-        "    cursor references tags(id)"
+        "    type not null references tag_types(id)"
         ");"
         "create table if not exists mappings ("
         "    id integer primary key not null,"
@@ -65,6 +107,7 @@ class Init(Command):
         "    name text unique not null"
         ");"
     )
+
     ADD_TYPES = (
         "insert or ignore into tag_types (id, name) values ("
         "    ?,?"
@@ -89,9 +132,11 @@ class Add(Command):
     ADD_TAG = (
         "insert or ignore into tags (name, type) values (?, ?);"
     )
+
     ADD_MAPPING = (
         "insert or ignore into mappings (category, member) values (?, ?);"
     )
+
     GET_ID = (
         "select id from tags where name = ? limit 1;"
     )
@@ -186,8 +231,29 @@ class Categories(Command):
         print(" ".join(members), file=stdout)
 
 
+RECURSIVE_MEMBERS = (
+    "with recursive"
+    "    members(id, name, type) as ("
+    "        select t.id, t.name, t.type"
+    "            from tags t"
+    "            inner join mappings m"
+    "                on"
+    "                    t.id = m.category"
+    "                    and t.name in ({categories})"
+    "        union all"
+    "        select t.id, t.name, t.type"
+    "            from members a"
+    "            inner join mappings m"
+    "                on a.id = m.category"
+    "            inner join tags t"
+    "                on m.member = t.id"
+    "    )"
+)
+
+
 class Show(Command):
     HEADER = "{}\n---\n"
+
     FOOTER = "\n***\n"
 
     ALL_NOTES = (
@@ -200,28 +266,14 @@ class Show(Command):
     )
 
     NOTES_OF_CATEGORIES = (
-        "with recursive"
-        "    all_members(id, name, type) as ("
-        "        select t.id, t.name, t.type"
-        "            from tags t"
-        "            inner join mappings m"
-        "                on"
-        "                    t.id = m.category"
-        "                    and t.name in ({{}})"
-        "        union all"
-        "        select t.id, t.name, t.type"
-        "            from all_members a"
-        "            inner join mappings m"
-        "                on a.id = m.category"
-        "            inner join tags t"
-        "                on m.member = t.id"
-        "    )"
+        "{}"
         "select distinct name"
-        "    from all_members"
-        "    where type = {note_type}"
+        "    from members"
+        "    where type = {}"
         "    order by name;"
     ).format(
-        note_type=TagType.NOTE.value
+        RECURSIVE_MEMBERS,
+        TagType.NOTE.value
     )
 
     @classmethod
@@ -235,26 +287,67 @@ class Show(Command):
     @classmethod
     def run(cls, cursor: Cursor, arguments: Namespace) -> None:
         if arguments.tags:
-            categories = arguments.tags
-            parameters = ",".join("?" * len(categories))
-            query = cls.NOTES_OF_CATEGORIES.format(
-                parameters
+            query = generate_query(
+                cls.NOTES_OF_CATEGORIES,
+                dict(categories=arguments.tags)
             )
-            cursor.execute(query, categories)
         else:
-            cursor.execute(cls.ALL_NOTES)
-
-        members = (row["name"] for row in cursor)
-        for member in members:
-            cls.print(member)
+            query = generate_query(cls.ALL_NOTES)
+        for row in query(cursor):
+            cls.print(row["name"])
 
     @classmethod
     def print(cls, member: str) -> None:
-        with open(NOTES_DIRECTORY / member, "r") as f:
+        with open(Properties.NOTES_DIRECTORY / member, "r") as f:
             print(cls.HEADER.format(member), end="")
             for line in f:
                 print(line, end="")
             print(cls.FOOTER, end="")
+
+
+class Last(Command):
+    ALL_NOTES = (
+        "select name"
+        "    from tags"
+        "    where type = {}"
+        "    order by name desc"
+        "    limit 1;"
+    ).format(
+        TagType.NOTE.value
+    )
+
+    NOTES_OF_CATEGORIES = (
+        "{}"
+        "select name"
+        "    from members"
+        "    where type = {}"
+        "    order by name desc"
+        "    limit 1;"
+    ).format(
+        RECURSIVE_MEMBERS,
+        TagType.NOTE.value
+    )
+
+    @classmethod
+    def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
+        parser.description = "Open the last note in a text editor"
+        parser.add_argument(
+            "tags", nargs="*", help="The tags to search, else all"
+        )
+        return parser
+
+    @classmethod
+    def run(cls, cursor: Cursor, arguments: Namespace) -> None:
+        if arguments.tags:
+            query = generate_query(
+                cls.NOTES_OF_CATEGORIES,
+                dict(categories=arguments.tags)
+            )
+        else:
+            query = generate_query(cls.ALL_NOTES)
+        for row in query(cursor):
+            # run EDITOR
+            print(row["name"])
 
 
 COMMANDS = OrderedDict(
@@ -264,11 +357,8 @@ COMMANDS = OrderedDict(
         ('members', Members),
         ('categories', Categories),
         ('show', Show),
-#        ('last', Last),
-#        ('current', Current),
-#        ('next', Next),
-#        ('previous', Previous),
-#        ('remove', Remove)
+        ('last', Last),
+        #('remove', Remove)
     ]
 )
 
@@ -284,7 +374,7 @@ def run(args: Sequence[str]) -> None:
 
     args = parser.parse_args(args)
 
-    with connect(str(DB_FILE)) as connection:
+    with connect(str(Properties.DB_FILE)) as connection:
         connection.row_factory = Row
         cursor = connection.cursor()
         cursor.execute("pragma foreign_keys = 1;")
