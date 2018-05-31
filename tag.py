@@ -13,7 +13,7 @@ from os import environ
 from subprocess import run as subprocess_run
 
 
-#TODO: use generate_query everywhere, write remove command, implement editor support in vim:
+#TODO: write remove command, implement editor support in vim:
 #          - get file name, write file name, add file name to tags mentioned if any
 #          - split this into :W to write with timestamp, :T to add file to any tags, :R to remove any tags, :L to list any tags
 #          - property file support
@@ -198,7 +198,7 @@ class Members(Command):
     )
 
     WITH_PARENT = QUERY.format(
-        "c.name = ?"
+        "c.name = {category}"
     )
 
     @classmethod
@@ -214,11 +214,16 @@ class Members(Command):
     @classmethod
     def run(cls, cursor: Cursor, arguments: Namespace) -> None:
         if arguments.category:
-            cursor.execute(cls.WITH_PARENT, (arguments.category,))
+            query = generate_query(
+                cls.WITH_PARENT,
+                dict(category=arguments.category)
+            )
         else:
-            cursor.execute(cls.NO_PARENT)
-        members = (row["name"] for row in cursor)
-        print(" ".join(members), file=stdout)
+            query = generate_query(cls.NO_PARENT)
+        print(
+            " ".join(row["name"] for row in query(cursor)),
+            file=stdout
+        )
 
 
 class Categories(Command):
@@ -228,7 +233,7 @@ class Categories(Command):
         "    inner join mappings m"
         "        on"
         "            t.id = m.member"
-        "            and t.name = ?"
+        "            and t.name = {tag}"
         "    inner join tags c"
         "        on m.category = c.id"
         "    order by c.name;"
@@ -242,10 +247,14 @@ class Categories(Command):
 
     @classmethod
     def run(cls, cursor: Cursor, arguments: Namespace) -> None:
-        tag = arguments.tag
-        cursor.execute(cls.QUERY, (tag,))
-        members = (row["name"] for row in cursor)
-        print(" ".join(members), file=stdout)
+        query = generate_query(
+            cls.QUERY,
+            dict(tag=arguments.tag)
+        )
+        print(
+            " ".join(row["name"] for row in query(cursor)),
+            file=stdout
+        )
 
 
 RECURSIVE_MEMBERS = (
