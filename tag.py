@@ -2,7 +2,7 @@
 
 from abc import ABCMeta, abstractmethod
 from enum import Enum
-from sqlite3 import connect, Cursor, Row
+from sqlite3 import connect, Cursor, Row, IntegrityError, OperationalError
 from argparse import ArgumentParser, Namespace
 from collections import OrderedDict
 from re import compile
@@ -13,7 +13,7 @@ from os import environ
 from subprocess import run as subprocess_run
 
 
-#TODO: write remove command, implement editor support in vim:
+#TODO: implement editor support in vim:
 #          - get file name, write file name, add file name to tags mentioned if any
 #          - split this into :W to write with timestamp, :T to add file to any tags, :R to remove any tags, :L to list any tags
 #          - property file support
@@ -108,27 +108,26 @@ class Command(metaclass=ABCMeta):
 
 class Init(Command):
     CREATE_TABLES = (
-        "create table if not exists tags ("
+        "create table tags ("
         "    id integer primary key not null,"
         "    name text unique not null,"
         "    type not null references tag_types(id)"
         ");"
-        "create table if not exists mappings ("
+        "create table mappings ("
         "    id integer primary key not null,"
         "    category not null references tags(id),"
         "    member not null references tags(id),"
         "    unique (category, member)"
         ");"
-        "create table if not exists tag_types ("
+        "create table tag_types ("
         "    id integer primary key not null,"
         "    name text unique not null"
         ");"
     )
 
     ADD_TYPES = (
-        "insert or ignore into tag_types (id, name) values ("
-        "    ?,?"
-        ");"
+        "insert into tag_types (id, name)"
+        "    values (:id, :name);"
     )
 
     @classmethod
@@ -138,24 +137,44 @@ class Init(Command):
 
     @classmethod
     def run(cls, cursor: Cursor, arguments: Namespace) -> None:
-        cursor.executescript(cls.CREATE_TABLES)
-        cursor.executemany(
-            cls.ADD_TYPES,
-            [(item.value, item.name.lower()) for item in TagType]
-        )
+        try:
+            cursor.executescript(cls.CREATE_TABLES)
+        except OperationalError as e:
+            raise RuntimeError(
+                "Error creating tables;"
+                " has the database already been initialized?"
+            ) from e
+        try:
+            cursor.executemany(
+                cls.ADD_TYPES,
+                [
+                    dict(id=item.value, name=item.name.lower())
+                    for item in TagType
+                ]
+            )
+        except IntegrityError as e:
+            raise RuntimeError(
+                "Error adding tag types;"
+                " has the database already been created?"
+            ) from e
 
 
 class Add(Command):
     ADD_TAG = (
-        "insert or ignore into tags (name, type) values (?, ?);"
+        "insert or ignore into tags (name, type)"
+        "    values (:name, :type);"
     )
 
     ADD_MAPPING = (
-        "insert or ignore into mappings (category, member) values (?, ?);"
+        "insert or ignore into mappings (category, member)"
+        "    values (:category, :member);"
     )
 
     GET_ID = (
-        "select id from tags where name = ? limit 1;"
+        "select id"
+        "    from tags"
+        "    where name = :name"
+        "    limit 1;"
     )
 
     @classmethod
@@ -170,15 +189,30 @@ class Add(Command):
     @classmethod
     def run(cls, cursor: Cursor, arguments: Namespace) -> None:
         category_type = Tag.of(arguments.category).value
-        cursor.execute(cls.ADD_TAG, (arguments.category, category_type))
-        cursor.execute(cls.GET_ID, (arguments.category,))
+        cursor.execute(
+            cls.ADD_TAG,
+            dict(name=arguments.category, type=category_type)
+        )
+        cursor.execute(
+            cls.GET_ID,
+            dict(name=arguments.category)
+        )
         category_id = next(row["id"] for row in cursor)
         for member in arguments.members:
             member_type = Tag.of(member).value
-            cursor.execute(cls.ADD_TAG, (member, member_type))
-            cursor.execute(cls.GET_ID, (member,))
+            cursor.execute(
+                cls.ADD_TAG,
+                dict(name=member, type=member_type)
+            )
+            cursor.execute(
+                cls.GET_ID,
+                dict(name=member)
+            )
             member_id = next(row["id"] for row in cursor)
-            cursor.execute(cls.ADD_MAPPING, (category_id, member_id))
+            cursor.execute(
+                cls.ADD_MAPPING,
+                dict(category=category_id, member=member_id)
+            )
 
 
 class Members(Command):
@@ -259,7 +293,7 @@ class Categories(Command):
 
 RECURSIVE_MEMBERS = (
     "with recursive"
-    "    members(id, name, type) as ("
+    "    members (id, name, type) as ("
     "        select t.id, t.name, t.type"
     "            from tags t"
     "            inner join mappings m"
@@ -437,6 +471,71 @@ class Last(Command):
             )
 
 
+class Remove(Command):
+    REMOVE_EVERYTHING = (
+        "delete from tags"
+        "    where name = {tag};"
+    )
+
+    REMOVE_CATEGORIES = (
+        "with"
+        "    member_id (id) as ("
+        "        select id"
+        "            from tags"
+        "            where name = {tag}"
+        "    )"
+        "    category_id (id) as ("
+        "        select id"
+        "            from tags"
+        "            where name in ({categories})"
+        "    )"
+        "delete from mappings"
+        "    where"
+        "        member in member_id"
+        "        and category in category_id;"
+    )
+
+    @classmethod
+    def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
+        parser.description = "Remove a tag from categories or from everything"
+        parser.add_argument("tag", help="The tag to remove")
+        parser.add_argument(
+            "categories",
+            nargs="*",
+            help="The categories to remove from, else everything"
+        )
+        return parser
+
+    @classmethod
+    def run(cls, cursor: Cursor, arguments: Namespace) -> None:
+        if arguments.categories:
+            query = generate_query(
+                cls.REMOVE_CATEGORIES,
+                dict(
+                    tag=arguments.tag,
+                    categories=arguments.categories
+                )
+            )
+        else:
+            query = generate_query(
+                cls.REMOVE_EVERYTHING,
+                dict(
+                    tag=arguments.tag
+                )
+            )
+        try:
+            results = query(cursor)
+        except IntegrityError as e:
+            raise RuntimeError(
+                (
+                    "Failed removing tag '{}'."
+                    " Try removing all of its categories and members first."
+                ).format(arguments.tag)
+            ) from e
+        for __ in results:
+            pass
+
+
 COMMANDS = OrderedDict(
     [
         ('init', Init),
@@ -445,7 +544,7 @@ COMMANDS = OrderedDict(
         ('categories', Categories),
         ('show', Show),
         ('last', Last),
-        #('remove', Remove)
+        ('remove', Remove)
     ]
 )
 
