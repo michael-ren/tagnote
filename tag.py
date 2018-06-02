@@ -4,20 +4,23 @@ from abc import ABCMeta, abstractmethod
 from argparse import ArgumentParser, Namespace
 from collections import OrderedDict
 from enum import Enum
+from json import load
 from os import environ
 from pathlib import Path
 from re import compile
+from shutil import which
 from sqlite3 import connect, Cursor, Row, IntegrityError, OperationalError
-from subprocess import run as subprocess_run
+from subprocess import run as subprocess_run, CalledProcessError
 from sys import stdout, stderr, argv, exit
 from traceback import print_exc
-from typing import Sequence, Iterator, Optional, Callable, Mapping, Any, Tuple
+from typing import (
+    Sequence, Iterator, Optional, Callable, Mapping, Any, Tuple, TextIO
+)
 
 
 #TODO: implement editor support in vim:
 #          - get file name, write file name, add file name to tags mentioned if any
 #          - split this into :W to write with timestamp, :T to add file to any tags, :R to remove any tags, :L to list any tags
-#          - property file support
 #          - journal, bookmarks, note-taking, research, todo list
 #          - solve problem of naming, get it in first, decide how to label it later
 #          - additions to a note should be linked as children of a note
@@ -25,12 +28,74 @@ from typing import Sequence, Iterator, Optional, Callable, Mapping, Any, Tuple
 #          - members start from present by default--we always start from the present and work backwards into the past through successive layers of interpretation
 
 
-class Properties:
-    DB_FILE = Path("./tags.sqlite")
+class Config:
+    EXIT_REQUIRED_PROPERTY = 11
+    EXIT_CONSTRUCTOR_FAILED = 12
+    EXIT_CHECK_FAILED = 13
 
-    NOTES_DIRECTORY = Path(".")
+    PROPERTIES = dict(
+        db_file=dict(
+            default=Path("tags.sqlite"),
+            constructor=Path,
+            check=None
+        ),
+        notes_directory=dict(
+            default=Path("."),
+            constructor=Path,
+            check=lambda v: v.is_dir(),
+            check_string="must be an existing directory"
+        ),
+        editor=dict(
+            default=[environ.get("EDITOR") or "vim"],
+            constructor=lambda v: [v] if isinstance(v, str) else v,
+            check=lambda v: isinstance(v, Sequence) and which(v[0]),
+            check_string="must be a valid command"
+        )
+    )
 
-    EDITOR = [environ.get("EDITOR") or "vim"]
+    def __init__(self, file: Optional[TextIO]=None) -> None:
+        self.db_file = None
+        self.notes_directory = None
+        self.editor = None
+
+        config_file = {}
+        if file:
+            config_file = load(file)
+        for name, spec in self.PROPERTIES.items():
+            default = spec.get("default")
+            constructor = spec.get("constructor")
+            check = spec.get("check")
+            check_string = spec.get("check_string")
+            config_file_value = config_file.get(name)
+
+            if config_file_value is None and default is None:
+                raise TagError(
+                    "Required property: '{}'".format(name),
+                    self.EXIT_REQUIRED_PROPERTY
+                )
+
+            if constructor and config_file_value is not None:
+                try:
+                    config_file_value = constructor(config_file_value)
+                except (
+                        TypeError, ValueError, LookupError, AttributeError
+                        ) as e:
+                    raise TagError(
+                        "Could not construct property '{}'"
+                        " from '{}'.".format(name, config_file_value),
+                        self.EXIT_CONSTRUCTOR_FAILED
+                    ) from e
+
+            if check is not None and config_file_value is not None \
+                    and not check(config_file_value):
+                if not check_string or not check_string.strip():
+                    check_string = "has an invalid value"
+                raise TagError(
+                    "'{}' {}.".format(name, check_string),
+                    self.EXIT_CHECK_FAILED
+                )
+
+            setattr(self, name, config_file_value or default)
 
 
 class TagType(Enum):
@@ -109,19 +174,21 @@ class Command(metaclass=ABCMeta):
 
     @classmethod
     @abstractmethod
-    def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
+    def run(
+            cls, cursor: Cursor, arguments: Namespace, config: Config
+            ) -> Iterator[str]:
         pass
 
     @classmethod
     @abstractmethod
-    def format(cls, tags: Iterator[str]) -> None:
+    def format(cls, tags: Iterator[str], config: Config) -> None:
         pass
 
 
 class Init(Command):
-    EXIT_DB_EXISTS = 2
+    EXIT_DB_EXISTS = 21
 
-    EXIT_TAG_TYPES_EXIST = 3
+    EXIT_TAG_TYPES_EXIST = 22
 
     CREATE_TABLES = (
         "create table tags ("
@@ -152,7 +219,9 @@ class Init(Command):
         return parser
 
     @classmethod
-    def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
+    def run(
+            cls, cursor: Cursor, arguments: Namespace, config: Config
+            ) -> Iterator[str]:
         try:
             cursor.executescript(cls.CREATE_TABLES)
         except OperationalError as e:
@@ -178,12 +247,12 @@ class Init(Command):
         yield from ()
 
     @classmethod
-    def format(cls, tags: Iterator[str]) -> None:
+    def format(cls, tags: Iterator[str], config: Config) -> None:
         pass
 
 
 class Add(Command):
-    EXIT_BAD_NAME = 2
+    EXIT_BAD_NAME = 21
 
     ADD_TAG = (
         "insert or ignore into tags (name, type)"
@@ -242,7 +311,9 @@ class Add(Command):
         return tag_id, changed
 
     @classmethod
-    def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
+    def run(
+            cls, cursor: Cursor, arguments: Namespace, config: Config
+            ) -> Iterator[str]:
         new_members = []
         category_id, category_changed = cls.add_tag(
             cursor, arguments.category
@@ -260,7 +331,7 @@ class Add(Command):
         yield from new_members
 
     @classmethod
-    def format(cls, tags: Iterator[str]) -> None:
+    def format(cls, tags: Iterator[str], config: Config) -> None:
         for tag in tags:
             print("Added new tag '{}'".format(tag), file=stderr)
 
@@ -296,7 +367,9 @@ class Members(Command):
         return parser
 
     @classmethod
-    def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
+    def run(
+            cls, cursor: Cursor, arguments: Namespace, config: Config
+            ) -> Iterator[str]:
         if arguments.category:
             query = generate_query(
                 cls.WITH_PARENT,
@@ -307,7 +380,7 @@ class Members(Command):
         yield from (row["name"] for row in query(cursor))
 
     @classmethod
-    def format(cls, tags: Iterator[str]) -> None:
+    def format(cls, tags: Iterator[str], config: Config) -> None:
         print(" ".join(tags), file=stdout)
 
 
@@ -331,7 +404,9 @@ class Categories(Command):
         return parser
 
     @classmethod
-    def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
+    def run(
+            cls, cursor: Cursor, arguments: Namespace, config: Config
+            ) -> Iterator[str]:
         query = generate_query(
             cls.QUERY,
             dict(tag=arguments.tag)
@@ -339,7 +414,7 @@ class Categories(Command):
         yield from (row["name"] for row in query(cursor))
 
     @classmethod
-    def format(cls, tags: Iterator[str]) -> None:
+    def format(cls, tags: Iterator[str], config: Config) -> None:
         print(" ".join(tags), file=stdout)
 
 
@@ -391,7 +466,9 @@ def slice_to_limit_offset(slice_: str) -> Tuple[int, int]:
 
 
 class Show(Command):
-    EXIT_BAD_RANGE = 2
+    EXIT_BAD_RANGE = 21
+
+    EXIT_FILE_NOT_FOUND = 22
 
     HEADER = "{}\n---\n"
 
@@ -450,7 +527,9 @@ class Show(Command):
         return dict(limit=limit, offset=offset)
 
     @classmethod
-    def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
+    def run(
+            cls, cursor: Cursor, arguments: Namespace, config: Config
+            ) -> Iterator[str]:
         limit_offset = cls.limit_offset(arguments.range)
         order = "asc" if arguments.beginning else "desc"
         if arguments.tags:
@@ -475,20 +554,29 @@ class Show(Command):
         yield from (row["name"] for row in query(cursor))
 
     @classmethod
-    def print(cls, member: str) -> None:
-        with open(Properties.NOTES_DIRECTORY / member, "r") as f:
-            print(cls.HEADER.format(member), end="")
-            for line in f:
-                print(line, end="")
-            print(cls.FOOTER, end="")
+    def print(cls, member: str, config: Config) -> None:
+        note_path = config.notes_directory / member
+        try:
+            with note_path.open() as f:
+                print(cls.HEADER.format(member), end="")
+                for line in f:
+                    print(line, end="")
+                print(cls.FOOTER, end="")
+        except FileNotFoundError as e:
+            raise TagError(
+                "Could not open note at path: '{}'".format(note_path),
+                cls.EXIT_FILE_NOT_FOUND
+            ) from e
 
     @classmethod
-    def format(cls, tags: Iterator[str]) -> None:
+    def format(cls, tags: Iterator[str], config: Config) -> None:
         for tag in tags:
-            cls.print(tag)
+            cls.print(tag, config)
 
 
 class Last(Command):
+    EXIT_EDITOR_FAILED = 21
+
     ALL_NOTES = (
         "select name"
         "    from tags"
@@ -517,7 +605,9 @@ class Last(Command):
         return parser
 
     @classmethod
-    def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
+    def run(
+            cls, cursor: Cursor, arguments: Namespace, config: Config
+            ) -> Iterator[str]:
         if arguments.tags:
             query = generate_query(
                 cls.NOTES_OF_CATEGORIES,
@@ -531,16 +621,20 @@ class Last(Command):
         yield from (row["name"] for row in query(cursor))
 
     @classmethod
-    def format(cls, tags: Iterator[str]) -> None:
+    def format(cls, tags: Iterator[str], config: Config) -> None:
         for tag in tags:
-            subprocess_run(
-                [*Properties.EDITOR, tag],
-                check=True
-            )
+            command = [*config.editor, tag]
+            try:
+                subprocess_run(command, check=True)
+            except (CalledProcessError, FileNotFoundError) as e:
+                raise TagError(
+                    "Editor command {} failed.".format(command),
+                    cls.EXIT_EDITOR_FAILED
+                ) from e
 
 
 class Remove(Command):
-    EXIT_EXISTING_MAPPINGS = 2
+    EXIT_EXISTING_MAPPINGS = 21
 
     REMOVE_EVERYTHING = (
         "delete from tags"
@@ -577,7 +671,9 @@ class Remove(Command):
         return parser
 
     @classmethod
-    def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
+    def run(
+            cls, cursor: Cursor, arguments: Namespace, config: Config
+            ) -> Iterator[str]:
         results = []
         if arguments.categories:
             query = generate_query(
@@ -616,13 +712,13 @@ class Remove(Command):
         yield from results
 
     @classmethod
-    def format(cls, tags: Iterator[str]) -> None:
+    def format(cls, tags: Iterator[str], config: Config) -> None:
         for tag in tags:
             print("Removed tag '{}'".format(tag), file=stderr)
 
 
 class Validate(Command):
-    EXIT_MISSING_NOTE = 2
+    EXIT_MISSING_NOTE = 21
 
     ALL_NOTES = (
         "select name"
@@ -640,13 +736,15 @@ class Validate(Command):
         return parser
 
     @classmethod
-    def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
+    def run(
+            cls, cursor: Cursor, arguments: Namespace, config: Config
+            ) -> Iterator[str]:
         cursor.execute(cls.ALL_NOTES, dict(note_type=TagType.NOTE.value))
         missing = 0
         for row in cursor:
             if missing >= arguments.max > 0:
                 break
-            note_path = Path(Properties.NOTES_DIRECTORY, row["name"])
+            note_path = Path(config.notes_directory, row["name"])
             if not note_path.is_file():
                 missing += 1
                 if arguments.max != 0:
@@ -656,7 +754,7 @@ class Validate(Command):
         yield from ()
 
     @classmethod
-    def format(cls, tags: Iterator[str]) -> None:
+    def format(cls, tags: Iterator[str], config: Config) -> None:
         pass
 
 
@@ -674,8 +772,23 @@ COMMANDS = OrderedDict(
 )
 
 
+def read_config_file(path: Path) -> Config:
+    try:
+        with path.open() as file:
+            config = Config(file)
+    except FileNotFoundError:
+        config = Config()
+    return config
+
+
 def run(args: Sequence[str]) -> None:
     parser = ArgumentParser()
+    parser.add_argument(
+        "--config", "-c",
+        help="The configuration file to use",
+        default=Path("tag.config.json"),
+        type=Path
+    )
     subparsers = parser.add_subparsers(help="Commands")
 
     for name, command in COMMANDS.items():
@@ -685,16 +798,23 @@ def run(args: Sequence[str]) -> None:
 
     args = parser.parse_args(args)
 
-    with connect(str(Properties.DB_FILE)) as connection:
+    config = None
+    try:
+        config = read_config_file(Path(args.config))
+    except TagError as e:
+        print_exc()
+        exit(e.exit_status)
+
+    with connect(str(config.db_file)) as connection:
         connection.row_factory = Row
         cursor = connection.cursor()
         cursor.execute("pragma foreign_keys = 1;")
         try:
-            results = args.run(cursor, args)
+            results = args.run(cursor, args, config)
+            args.format(results, config)
         except TagError as e:
             print_exc()
             exit(e.exit_status)
-        args.format(results)
 
 
 def main():
