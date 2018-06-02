@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
 
 from abc import ABCMeta, abstractmethod
-from enum import Enum
-from sqlite3 import connect, Cursor, Row, IntegrityError, OperationalError
 from argparse import ArgumentParser, Namespace
 from collections import OrderedDict
-from re import compile
-from sys import stdout, argv
-from typing import Sequence, Iterator, Optional, Callable, Mapping, Any, Tuple
-from pathlib import Path
+from enum import Enum
 from os import environ
+from pathlib import Path
+from re import compile
+from sqlite3 import connect, Cursor, Row, IntegrityError, OperationalError
 from subprocess import run as subprocess_run
+from sys import stdout, stderr, argv, exit
+from traceback import print_exc
+from typing import Sequence, Iterator, Optional, Callable, Mapping, Any, Tuple
 
 
 #TODO: implement editor support in vim:
 #          - get file name, write file name, add file name to tags mentioned if any
 #          - split this into :W to write with timestamp, :T to add file to any tags, :R to remove any tags, :L to list any tags
 #          - property file support
+#          - pass tag_type through args
 #          - journal, bookmarks, note-taking, research, todo list
 #          - solve problem of naming, get it in first, decide how to label it later
 #          - additions to a note should be linked as children of a note
@@ -49,6 +51,12 @@ class Tag:
             if pattern.match(value):
                 return type_
         raise ValueError("No tag type found for '{}'".format(value))
+
+
+class TagError(Exception):
+    def __init__(self, message: str, exit_status: int = 1) -> None:
+        super().__init__(message)
+        self.exit_status = exit_status
 
 
 def insert_new_key(mapping: dict, key: Any, value: Any) -> None:
@@ -102,11 +110,20 @@ class Command(metaclass=ABCMeta):
 
     @classmethod
     @abstractmethod
-    def run(cls, cursor: Cursor, arguments: Namespace) -> None:
+    def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
+        pass
+
+    @classmethod
+    @abstractmethod
+    def format(cls, tags: Iterator[str]) -> None:
         pass
 
 
 class Init(Command):
+    EXIT_DB_EXISTS = 2
+
+    EXIT_TAG_TYPES_EXIST = 3
+
     CREATE_TABLES = (
         "create table tags ("
         "    id integer primary key not null,"
@@ -132,17 +149,18 @@ class Init(Command):
 
     @classmethod
     def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
-        parser.description = "Initialize the tag database"
+        parser.description = "Initialize the tag database."
         return parser
 
     @classmethod
-    def run(cls, cursor: Cursor, arguments: Namespace) -> None:
+    def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
         try:
             cursor.executescript(cls.CREATE_TABLES)
         except OperationalError as e:
-            raise RuntimeError(
+            raise TagError(
                 "Error creating tables;"
-                " has the database already been initialized?"
+                " has the database already been initialized?",
+                cls.EXIT_DB_EXISTS
             ) from e
         try:
             cursor.executemany(
@@ -153,13 +171,21 @@ class Init(Command):
                 ]
             )
         except IntegrityError as e:
-            raise RuntimeError(
+            raise TagError(
                 "Error adding tag types;"
-                " has the database already been created?"
+                " has the database already been created?",
+                cls.EXIT_TAG_TYPES_EXIST
             ) from e
+        yield from ()
+
+    @classmethod
+    def format(cls, tags: Iterator[str]) -> None:
+        pass
 
 
 class Add(Command):
+    EXIT_BAD_NAME = 2
+
     ADD_TAG = (
         "insert or ignore into tags (name, type)"
         "    values (:name, :type);"
@@ -179,7 +205,7 @@ class Add(Command):
 
     @classmethod
     def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
-        parser.description = "Add members to a category"
+        parser.description = "Add members to a category."
         parser.add_argument("category", help="The category to add to")
         parser.add_argument(
             "members", nargs="*", help="The members to add to the category"
@@ -187,32 +213,57 @@ class Add(Command):
         return parser
 
     @classmethod
-    def run(cls, cursor: Cursor, arguments: Namespace) -> None:
-        category_type = Tag.of(arguments.category).value
+    def add_tag(cls, cursor: Cursor, name: str) -> Tuple[int, bool]:
+        try:
+            tag_type = Tag.of(name).value
+        except ValueError as e:
+            raise TagError(
+                "Bad tag name {}".format(name), cls.EXIT_BAD_NAME
+            ) from e
         cursor.execute(
             cls.ADD_TAG,
-            dict(name=arguments.category, type=category_type)
+            dict(name=name, type=tag_type)
         )
+        if cursor.rowcount == 1:
+            changed = True
+        elif cursor.rowcount == 0:
+            changed = False
+        else:
+            raise RuntimeError(
+                "Error adding tag {}: {} rows modified".format(
+                    name, cursor.rowcount
+                ),
+                cls.EXIT_BAD_NAME
+            )
         cursor.execute(
             cls.GET_ID,
-            dict(name=arguments.category)
+            dict(name=name)
         )
-        category_id = next(row["id"] for row in cursor)
+        tag_id = next(row["id"] for row in cursor)
+        return tag_id, changed
+
+    @classmethod
+    def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
+        new_members = []
+        category_id, category_changed = cls.add_tag(
+            cursor, arguments.category
+        )
+        if category_changed:
+            new_members.append(arguments.category)
         for member in arguments.members:
-            member_type = Tag.of(member).value
-            cursor.execute(
-                cls.ADD_TAG,
-                dict(name=member, type=member_type)
-            )
-            cursor.execute(
-                cls.GET_ID,
-                dict(name=member)
-            )
-            member_id = next(row["id"] for row in cursor)
+            member_id, member_changed = cls.add_tag(cursor, member)
+            if member_changed:
+                new_members.append(member)
             cursor.execute(
                 cls.ADD_MAPPING,
                 dict(category=category_id, member=member_id)
             )
+        yield from new_members
+
+    @classmethod
+    def format(cls, tags: Iterator[str]) -> None:
+        for tag in tags:
+            print("Added new tag '{}'".format(tag), file=stderr)
 
 
 class Members(Command):
@@ -237,7 +288,7 @@ class Members(Command):
 
     @classmethod
     def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
-        parser.description = "List immediate members of a category"
+        parser.description = "List immediate members of a category."
         parser.add_argument(
             "category",
             help="The category to list, else all tags without a category",
@@ -246,7 +297,7 @@ class Members(Command):
         return parser
 
     @classmethod
-    def run(cls, cursor: Cursor, arguments: Namespace) -> None:
+    def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
         if arguments.category:
             query = generate_query(
                 cls.WITH_PARENT,
@@ -254,10 +305,11 @@ class Members(Command):
             )
         else:
             query = generate_query(cls.NO_PARENT)
-        print(
-            " ".join(row["name"] for row in query(cursor)),
-            file=stdout
-        )
+        yield from (row["name"] for row in query(cursor))
+
+    @classmethod
+    def format(cls, tags: Iterator[str]) -> None:
+        print(" ".join(tags), file=stdout)
 
 
 class Categories(Command):
@@ -275,20 +327,21 @@ class Categories(Command):
 
     @classmethod
     def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
-        parser.description = "List immediate categories a tag belongs to"
+        parser.description = "List immediate categories a tag belongs to."
         parser.add_argument("tag", help="The tag to list categories for")
         return parser
 
     @classmethod
-    def run(cls, cursor: Cursor, arguments: Namespace) -> None:
+    def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
         query = generate_query(
             cls.QUERY,
             dict(tag=arguments.tag)
         )
-        print(
-            " ".join(row["name"] for row in query(cursor)),
-            file=stdout
-        )
+        yield from (row["name"] for row in query(cursor))
+
+    @classmethod
+    def format(cls, tags: Iterator[str]) -> None:
+        print(" ".join(tags), file=stdout)
 
 
 RECURSIVE_MEMBERS = (
@@ -320,7 +373,7 @@ def slice_to_limit_offset(slice_: str) -> Tuple[int, int]:
     if components[0]:
         start = int(components[0])
         if start < 0:
-            raise ValueError("Negative slice indices are not supported")
+            raise ValueError("Negative slice indices are not supported.")
     else:
         start = 0
     if len(components) == 1:
@@ -328,7 +381,7 @@ def slice_to_limit_offset(slice_: str) -> Tuple[int, int]:
     elif components[1]:
         end = int(components[1])
         if end < 0:
-            raise ValueError("Negative slice indices are not supported")
+            raise ValueError("Negative slice indices are not supported.")
     else:
         end = -1
 
@@ -339,6 +392,8 @@ def slice_to_limit_offset(slice_: str) -> Tuple[int, int]:
 
 
 class Show(Command):
+    EXIT_BAD_RANGE = 2
+
     HEADER = "{}\n---\n"
 
     FOOTER = "\n***\n"
@@ -367,7 +422,7 @@ class Show(Command):
 
     @classmethod
     def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
-        parser.description = "Combine all notes into a single document"
+        parser.description = "Combine all notes into a single document."
         parser.add_argument(
             "tags", nargs="*", help="The tags to combine, else all"
         )
@@ -385,7 +440,21 @@ class Show(Command):
         return parser
 
     @classmethod
-    def run(cls, cursor: Cursor, arguments: Namespace) -> None:
+    def limit_offset(cls, range_: str) -> Mapping[str, int]:
+        if range_ is not None:
+            try:
+                limit, offset = slice_to_limit_offset(range_)
+            except ValueError as e:
+                raise TagError(
+                    "Bad range: {}".format(range_), cls.EXIT_BAD_RANGE
+                ) from e
+        else:
+            limit = -1
+            offset = 0
+        return dict(limit=limit, offset=offset)
+
+    @classmethod
+    def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
         limit_offset = cls.limit_offset(arguments.range)
         order = "asc" if arguments.beginning else "desc"
         if arguments.tags:
@@ -403,17 +472,7 @@ class Show(Command):
                 limit_offset,
                 dict(order=order)
             )
-        for row in query(cursor):
-            cls.print(row["name"])
-
-    @classmethod
-    def limit_offset(cls, range_: str) -> Mapping[str, int]:
-        if range_ is not None:
-            limit, offset = slice_to_limit_offset(range_)
-        else:
-            limit = -1
-            offset = 0
-        return dict(limit=limit, offset=offset)
+        yield from (row["name"] for row in query(cursor))
 
     @classmethod
     def print(cls, member: str) -> None:
@@ -422,6 +481,11 @@ class Show(Command):
             for line in f:
                 print(line, end="")
             print(cls.FOOTER, end="")
+
+    @classmethod
+    def format(cls, tags: Iterator[str]) -> None:
+        for tag in tags:
+            cls.print(tag)
 
 
 class Last(Command):
@@ -449,14 +513,14 @@ class Last(Command):
 
     @classmethod
     def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
-        parser.description = "Open the last note in a text editor"
+        parser.description = "Open the last note in a text editor."
         parser.add_argument(
             "tags", nargs="*", help="The tags to search, else all"
         )
         return parser
 
     @classmethod
-    def run(cls, cursor: Cursor, arguments: Namespace) -> None:
+    def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
         if arguments.tags:
             query = generate_query(
                 cls.NOTES_OF_CATEGORIES,
@@ -464,14 +528,20 @@ class Last(Command):
             )
         else:
             query = generate_query(cls.ALL_NOTES)
-        for row in query(cursor):
+        yield from (row["name"] for row in query(cursor))
+
+    @classmethod
+    def format(cls, tags: Iterator[str]) -> None:
+        for tag in tags:
             subprocess_run(
-                [*Properties.EDITOR, row["name"]],
+                [*Properties.EDITOR, tag],
                 check=True
             )
 
 
 class Remove(Command):
+    EXIT_EXISTING_MAPPINGS = 2
+
     REMOVE_EVERYTHING = (
         "delete from tags"
         "    where name = {tag};"
@@ -497,7 +567,7 @@ class Remove(Command):
 
     @classmethod
     def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
-        parser.description = "Remove a tag from categories or from everything"
+        parser.description = "Remove a tag from categories or from everything."
         parser.add_argument("tag", help="The tag to remove")
         parser.add_argument(
             "categories",
@@ -507,7 +577,8 @@ class Remove(Command):
         return parser
 
     @classmethod
-    def run(cls, cursor: Cursor, arguments: Namespace) -> None:
+    def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
+        results = []
         if arguments.categories:
             query = generate_query(
                 cls.REMOVE_CATEGORIES,
@@ -516,6 +587,7 @@ class Remove(Command):
                     categories=arguments.categories
                 )
             )
+            query(cursor)
         else:
             query = generate_query(
                 cls.REMOVE_EVERYTHING,
@@ -523,17 +595,69 @@ class Remove(Command):
                     tag=arguments.tag
                 )
             )
-        try:
-            results = query(cursor)
-        except IntegrityError as e:
-            raise RuntimeError(
-                (
-                    "Failed removing tag '{}'."
-                    " Try removing all of its categories and members first."
-                ).format(arguments.tag)
-            ) from e
-        for __ in results:
-            pass
+            try:
+                query(cursor)
+                if cursor.rowcount == 1:
+                    results.append(arguments.tag)
+                elif cursor.rowcount > 1:
+                    raise RuntimeError(
+                        "Removed more than one row deleting '{}'".format(
+                            arguments.tag
+                        )
+                    )
+            except IntegrityError as e:
+                raise TagError(
+                    (
+                        "Failed removing tag '{}'."
+                        " Try removing all of its categories and members first."
+                    ).format(arguments.tag),
+                    cls.EXIT_EXISTING_MAPPINGS
+                ) from e
+        yield from results
+
+    @classmethod
+    def format(cls, tags: Iterator[str]) -> None:
+        for tag in tags:
+            print("Removed tag '{}'".format(tag), file=stderr)
+
+
+class Validate(Command):
+    EXIT_MISSING_NOTE = 2
+
+    ALL_NOTES = (
+        "select name"
+        "    from tags"
+        "    where type = :type;"
+    )
+
+    @classmethod
+    def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
+        parser.description = "Check that all notes exist; print missing notes."
+        parser.add_argument(
+            "--max", "-m",
+            help="The maximum missing notes to print", default=10, type=int
+        )
+        return parser
+
+    @classmethod
+    def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
+        cursor.execute(cls.ALL_NOTES, dict(type=TagType.NOTE.value))
+        missing = 0
+        for row in cursor:
+            if missing >= arguments.max > 0:
+                break
+            note_path = Path(Properties.NOTES_DIRECTORY, row["name"])
+            if not note_path.is_file():
+                missing += 1
+                if arguments.max != 0:
+                    print(row["name"], file=stderr)
+        if missing > 0:
+            raise TagError("Missing notes", cls.EXIT_MISSING_NOTE)
+        yield from ()
+
+    @classmethod
+    def format(cls, tags: Iterator[str]) -> None:
+        pass
 
 
 COMMANDS = OrderedDict(
@@ -544,7 +668,8 @@ COMMANDS = OrderedDict(
         ('categories', Categories),
         ('show', Show),
         ('last', Last),
-        ('remove', Remove)
+        ('remove', Remove),
+        ('validate', Validate)
     ]
 )
 
@@ -556,7 +681,7 @@ def run(args: Sequence[str]) -> None:
     for name, command in COMMANDS.items():
         command_parser = subparsers.add_parser(name)
         command_parser = command.arguments(command_parser)
-        command_parser.set_defaults(run=command.run)
+        command_parser.set_defaults(run=command.run, format=command.format)
 
     args = parser.parse_args(args)
 
@@ -564,7 +689,12 @@ def run(args: Sequence[str]) -> None:
         connection.row_factory = Row
         cursor = connection.cursor()
         cursor.execute("pragma foreign_keys = 1;")
-        args.run(cursor, args)
+        try:
+            results = args.run(cursor, args)
+        except TagError as e:
+            print_exc()
+            exit(e.exit_status)
+        args.format(results)
 
 
 def main():
