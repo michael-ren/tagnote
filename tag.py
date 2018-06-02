@@ -18,7 +18,6 @@ from typing import Sequence, Iterator, Optional, Callable, Mapping, Any, Tuple
 #          - get file name, write file name, add file name to tags mentioned if any
 #          - split this into :W to write with timestamp, :T to add file to any tags, :R to remove any tags, :L to list any tags
 #          - property file support
-#          - pass tag_type through args
 #          - journal, bookmarks, note-taking, research, todo list
 #          - solve problem of naming, get it in first, decide how to label it later
 #          - additions to a note should be linked as children of a note
@@ -401,23 +400,20 @@ class Show(Command):
     ALL_NOTES = (
         "select name"
         "    from tags"
-        "    where type = {}"
-        "    order by name {{order}}"
-        "    limit {{limit}} offset {{offset}};"
-    ).format(
-        TagType.NOTE.value
+        "    where type = {note_type}"
+        "    order by name {order}"
+        "    limit {limit} offset {offset};"
     )
 
     NOTES_OF_CATEGORIES = (
         "{}"
         "select distinct name"
         "    from members"
-        "    where type = {}"
+        "    where type = {{note_type}}"
         "    order by name {{order}}"
         "    limit {{limit}} offset {{offset}};"
     ).format(
-        RECURSIVE_MEMBERS,
-        TagType.NOTE.value
+        RECURSIVE_MEMBERS
     )
 
     @classmethod
@@ -462,6 +458,7 @@ class Show(Command):
                 cls.NOTES_OF_CATEGORIES,
                 dict(
                     categories=arguments.tags,
+                    note_type=TagType.NOTE.value,
                     **limit_offset
                 ),
                 dict(order=order)
@@ -469,7 +466,10 @@ class Show(Command):
         else:
             query = generate_query(
                 cls.ALL_NOTES,
-                limit_offset,
+                dict(
+                    note_type=TagType.NOTE.value,
+                    **limit_offset
+                ),
                 dict(order=order)
             )
         yield from (row["name"] for row in query(cursor))
@@ -492,23 +492,20 @@ class Last(Command):
     ALL_NOTES = (
         "select name"
         "    from tags"
-        "    where type = {}"
+        "    where type = {note_type}"
         "    order by name desc"
         "    limit 1;"
-    ).format(
-        TagType.NOTE.value
     )
 
     NOTES_OF_CATEGORIES = (
         "{}"
         "select name"
         "    from members"
-        "    where type = {}"
+        "    where type = {{note_type}}"
         "    order by name desc"
         "    limit 1;"
     ).format(
         RECURSIVE_MEMBERS,
-        TagType.NOTE.value
     )
 
     @classmethod
@@ -524,10 +521,13 @@ class Last(Command):
         if arguments.tags:
             query = generate_query(
                 cls.NOTES_OF_CATEGORIES,
-                dict(categories=arguments.tags)
+                dict(categories=arguments.tags, note_type=TagType.NOTE.value)
             )
         else:
-            query = generate_query(cls.ALL_NOTES)
+            query = generate_query(
+                cls.ALL_NOTES,
+                dict(note_type=TagType.NOTE.value)
+            )
         yield from (row["name"] for row in query(cursor))
 
     @classmethod
@@ -627,7 +627,7 @@ class Validate(Command):
     ALL_NOTES = (
         "select name"
         "    from tags"
-        "    where type = :type;"
+        "    where type = :note_type;"
     )
 
     @classmethod
@@ -641,7 +641,7 @@ class Validate(Command):
 
     @classmethod
     def run(cls, cursor: Cursor, arguments: Namespace) -> Iterator[str]:
-        cursor.execute(cls.ALL_NOTES, dict(type=TagType.NOTE.value))
+        cursor.execute(cls.ALL_NOTES, dict(note_type=TagType.NOTE.value))
         missing = 0
         for row in cursor:
             if missing >= arguments.max > 0:
