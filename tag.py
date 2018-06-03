@@ -829,7 +829,7 @@ def run(args: Sequence[str]) -> None:
 
 
 def main():
-    run(argv)
+    run(argv[1:])
 
 
 if __name__ == "__main__":
