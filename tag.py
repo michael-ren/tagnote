@@ -781,7 +781,7 @@ def read_config_file(path: Path) -> Config:
     return config
 
 
-def run(args: Sequence[str]) -> None:
+def run(args: Optional[Sequence[str]]=None) -> None:
     parser = ArgumentParser()
     parser.add_argument(
         "--config", "-c",
@@ -818,7 +818,7 @@ def run(args: Sequence[str]) -> None:
 
 
 def main():
-    run(argv)
+    run()
 
 
 if __name__ == "__main__":
