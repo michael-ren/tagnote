@@ -789,7 +789,7 @@ def handle_tag_error(error: TagError, debug: bool=False) -> None:
     exit(error.exit_status)
 
 
-def run(args: Optional[Sequence[str]]=None) -> None:
+def run(args: Sequence[str]) -> None:
     parser = ArgumentParser()
     parser.add_argument(
         "--config", "-c",
@@ -829,7 +829,7 @@ def run(args: Optional[Sequence[str]]=None) -> None:
 
 
 def main():
-    run()
+    run(argv)
 
 
 if __name__ == "__main__":
