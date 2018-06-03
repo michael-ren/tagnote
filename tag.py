@@ -781,6 +781,14 @@ def read_config_file(path: Path) -> Config:
     return config
 
 
+def handle_tag_error(error: TagError, debug: bool=False) -> None:
+    if debug:
+        print_exc()
+    else:
+        print(error, file=stderr)
+    exit(error.exit_status)
+
+
 def run(args: Optional[Sequence[str]]=None) -> None:
     parser = ArgumentParser()
     parser.add_argument(
@@ -788,6 +796,11 @@ def run(args: Optional[Sequence[str]]=None) -> None:
         help="The configuration file to use",
         default=Path("tag.config.json"),
         type=Path
+    )
+    parser.add_argument(
+        "--debug", "-d",
+        help="Print more verbose error messages",
+        action="store_true"
     )
     subparsers = parser.add_subparsers(help="Commands")
 
@@ -802,8 +815,7 @@ def run(args: Optional[Sequence[str]]=None) -> None:
     try:
         config = read_config_file(Path(args.config))
     except TagError as e:
-        print_exc()
-        exit(e.exit_status)
+        handle_tag_error(e, args.debug)
 
     with connect(str(config.db_file)) as connection:
         connection.row_factory = Row
@@ -813,8 +825,7 @@ def run(args: Optional[Sequence[str]]=None) -> None:
             results = args.run(cursor, args, config)
             args.format(results, config)
         except TagError as e:
-            print_exc()
-            exit(e.exit_status)
+            handle_tag_error(e, args.debug)
 
 
 def main():
