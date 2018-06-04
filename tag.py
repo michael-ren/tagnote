@@ -2,7 +2,6 @@
 
 from abc import ABCMeta, abstractmethod
 from argparse import ArgumentParser, Namespace
-from collections import OrderedDict
 from enum import Enum
 from json import load
 from os import environ
@@ -26,6 +25,11 @@ from typing import (
 #          - additions to a note should be linked as children of a note
 #          - can either write whole note or quote parts of it or nothing at all, like email
 #          - members start from present by default--we always start from the present and work backwards into the past through successive layers of interpretation
+
+
+# fix init and validate
+# validate notes not in db
+# show has regex filter
 
 
 class Config:
@@ -169,7 +173,17 @@ def generate_query(
 class Command(metaclass=ABCMeta):
     @classmethod
     @abstractmethod
-    def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
+    def name(cls) -> str:
+        pass
+
+    @classmethod
+    @abstractmethod
+    def description(cls) -> str:
+        pass
+
+    @classmethod
+    @abstractmethod
+    def arguments(cls, parser: ArgumentParser) -> None:
         pass
 
     @classmethod
@@ -186,6 +200,10 @@ class Command(metaclass=ABCMeta):
 
 
 class Init(Command):
+    NAME = "init"
+
+    DESCRIPTION = "Initialize the tag database."
+
     EXIT_DB_EXISTS = 21
 
     EXIT_TAG_TYPES_EXIST = 22
@@ -214,9 +232,16 @@ class Init(Command):
     )
 
     @classmethod
-    def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
-        parser.description = "Initialize the tag database."
-        return parser
+    def name(cls) -> str:
+        return cls.NAME
+
+    @classmethod
+    def description(cls) -> str:
+        return cls.DESCRIPTION
+
+    @classmethod
+    def arguments(cls, parser: ArgumentParser) -> None:
+        pass
 
     @classmethod
     def run(
@@ -252,6 +277,10 @@ class Init(Command):
 
 
 class Add(Command):
+    NAME = "add"
+
+    DESCRIPTION = "Add members to a category."
+
     EXIT_BAD_NAME = 21
 
     ADD_TAG = (
@@ -272,13 +301,19 @@ class Add(Command):
     )
 
     @classmethod
-    def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
-        parser.description = "Add members to a category."
+    def name(cls) -> str:
+        return cls.NAME
+
+    @classmethod
+    def description(cls) -> str:
+        return cls.DESCRIPTION
+
+    @classmethod
+    def arguments(cls, parser: ArgumentParser) -> None:
         parser.add_argument("category", help="The category to add to")
         parser.add_argument(
             "members", nargs="*", help="The members to add to the category"
         )
-        return parser
 
     @classmethod
     def add_tag(cls, cursor: Cursor, name: str) -> Tuple[int, bool]:
@@ -337,6 +372,10 @@ class Add(Command):
 
 
 class Members(Command):
+    NAME = "members"
+
+    DESCRIPTION = "List immediate members of a category."
+
     QUERY = (
         "select t.name"
         "    from tags t"
@@ -357,14 +396,20 @@ class Members(Command):
     )
 
     @classmethod
-    def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
-        parser.description = "List immediate members of a category."
+    def name(cls) -> str:
+        return cls.NAME
+
+    @classmethod
+    def description(cls) -> str:
+        return cls.DESCRIPTION
+
+    @classmethod
+    def arguments(cls, parser: ArgumentParser) -> None:
         parser.add_argument(
             "category",
             help="The category to list, else all tags without a category",
             nargs="?"
         )
-        return parser
 
     @classmethod
     def run(
@@ -385,6 +430,10 @@ class Members(Command):
 
 
 class Categories(Command):
+    NAME = "categories"
+
+    DESCRIPTION = "List immediate categories a tag belongs to."
+
     QUERY = (
         "select c.name"
         "    from tags t"
@@ -398,10 +447,16 @@ class Categories(Command):
     )
 
     @classmethod
-    def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
-        parser.description = "List immediate categories a tag belongs to."
+    def name(cls) -> str:
+        return cls.NAME
+
+    @classmethod
+    def description(cls) -> str:
+        return cls.DESCRIPTION
+
+    @classmethod
+    def arguments(cls, parser: ArgumentParser) -> None:
         parser.add_argument("tag", help="The tag to list categories for")
-        return parser
 
     @classmethod
     def run(
@@ -466,6 +521,10 @@ def slice_to_limit_offset(slice_: str) -> Tuple[int, int]:
 
 
 class Show(Command):
+    NAME = "show"
+
+    DESCRIPTION = "Combine all notes into a single document."
+
     EXIT_BAD_RANGE = 21
 
     EXIT_FILE_NOT_FOUND = 22
@@ -494,23 +553,27 @@ class Show(Command):
     )
 
     @classmethod
-    def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
-        parser.description = "Combine all notes into a single document."
+    def name(cls) -> str:
+        return cls.NAME
+
+    @classmethod
+    def description(cls) -> str:
+        return cls.DESCRIPTION
+
+    @classmethod
+    def arguments(cls, parser: ArgumentParser) -> None:
         parser.add_argument(
             "tags", nargs="*", help="The tags to combine, else all"
         )
         parser.add_argument(
-            "-r",
-            "--range",
+            "-r", "--range",
             help="A continuous range of notes to show in Python slice notation"
         )
         parser.add_argument(
-            "-b",
-            "--beginning",
+            "-b", "--beginning",
             action="store_true",
             help="List notes from beginning forward and not present backward"
         )
-        return parser
 
     @classmethod
     def limit_offset(cls, range_: str) -> Mapping[str, int]:
@@ -575,6 +638,10 @@ class Show(Command):
 
 
 class Last(Command):
+    NAME = "last"
+
+    DESCRIPTION = "Open the last note in a text editor."
+
     EXIT_EDITOR_FAILED = 21
 
     ALL_NOTES = (
@@ -597,12 +664,18 @@ class Last(Command):
     )
 
     @classmethod
-    def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
-        parser.description = "Open the last note in a text editor."
+    def name(cls) -> str:
+        return cls.NAME
+
+    @classmethod
+    def description(cls) -> str:
+        return cls.DESCRIPTION
+
+    @classmethod
+    def arguments(cls, parser: ArgumentParser) -> None:
         parser.add_argument(
             "tags", nargs="*", help="The tags to search, else all"
         )
-        return parser
 
     @classmethod
     def run(
@@ -634,6 +707,10 @@ class Last(Command):
 
 
 class Remove(Command):
+    NAME = "remove"
+
+    DESCRIPTION = "Remove a tag from categories or from everything."
+
     EXIT_EXISTING_MAPPINGS = 21
 
     REMOVE_EVERYTHING = (
@@ -660,15 +737,21 @@ class Remove(Command):
     )
 
     @classmethod
-    def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
-        parser.description = "Remove a tag from categories or from everything."
+    def name(cls) -> str:
+        return cls.NAME
+
+    @classmethod
+    def description(cls) -> str:
+        return cls.DESCRIPTION
+
+    @classmethod
+    def arguments(cls, parser: ArgumentParser) -> None:
         parser.add_argument("tag", help="The tag to remove")
         parser.add_argument(
             "categories",
             nargs="*",
             help="The categories to remove from, else everything"
         )
-        return parser
 
     @classmethod
     def run(
@@ -718,6 +801,10 @@ class Remove(Command):
 
 
 class Validate(Command):
+    NAME = "validate"
+
+    DESCRIPTION = "Check that all notes exist; print missing notes."
+
     EXIT_MISSING_NOTE = 21
 
     ALL_NOTES = (
@@ -727,13 +814,21 @@ class Validate(Command):
     )
 
     @classmethod
-    def arguments(cls, parser: ArgumentParser) -> ArgumentParser:
-        parser.description = "Check that all notes exist; print missing notes."
+    def name(cls) -> str:
+        return cls.NAME
+
+    @classmethod
+    def description(cls) -> str:
+        return cls.DESCRIPTION
+
+    @classmethod
+    def arguments(cls, parser: ArgumentParser) -> None:
         parser.add_argument(
             "--max", "-m",
-            help="The maximum missing notes to print", default=10, type=int
+            help="The maximum missing notes to print",
+            default=10,
+            type=int
         )
-        return parser
 
     @classmethod
     def run(
@@ -758,18 +853,41 @@ class Validate(Command):
         pass
 
 
-COMMANDS = OrderedDict(
-    [
-        ('init', Init),
-        ('add', Add),
-        ('members', Members),
-        ('categories', Categories),
-        ('show', Show),
-        ('last', Last),
-        ('remove', Remove),
-        ('validate', Validate)
-    ]
+COMMANDS = (
+    Init,
+    Add,
+    Members,
+    Categories,
+    Show,
+    Last,
+    Remove,
+    Validate
 )
+
+
+def argument_parser() -> ArgumentParser:
+    parser = ArgumentParser()
+    parser.add_argument(
+        "--config", "-c",
+        help="The configuration file to use",
+        default=Path("tag.config.json"),
+        type=Path
+    )
+    parser.add_argument(
+        "--debug", "-d",
+        help="Print more verbose error messages",
+        action="store_true"
+    )
+    action = parser.add_subparsers(metavar="command")
+
+    for command in COMMANDS:
+        command_parser = action.add_parser(
+            command.name(), help=command.description()
+        )
+        command.arguments(command_parser)
+        command_parser.set_defaults(run=command.run, format=command.format)
+
+    return parser
 
 
 def read_config_file(path: Path) -> Config:
@@ -790,25 +908,7 @@ def handle_tag_error(error: TagError, debug: bool=False) -> None:
 
 
 def run(args: Sequence[str]) -> None:
-    parser = ArgumentParser()
-    parser.add_argument(
-        "--config", "-c",
-        help="The configuration file to use",
-        default=Path("tag.config.json"),
-        type=Path
-    )
-    parser.add_argument(
-        "--debug", "-d",
-        help="Print more verbose error messages",
-        action="store_true"
-    )
-    subparsers = parser.add_subparsers(help="Commands")
-
-    for name, command in COMMANDS.items():
-        command_parser = subparsers.add_parser(name)
-        command_parser = command.arguments(command_parser)
-        command_parser.set_defaults(run=command.run, format=command.format)
-
+    parser = argument_parser()
     args = parser.parse_args(args)
 
     config = None
