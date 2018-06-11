@@ -229,9 +229,9 @@ class Command(metaclass=ABCMeta):
         pass
 
     @classmethod
-    @abstractmethod
     def format(cls, tags: Iterator[str], config: Config) -> None:
-        pass
+        for tag in tags:
+            print(tag, file=stdout)
 
 
 class Init(Command):
@@ -301,10 +301,6 @@ class Init(Command):
                 cls.EXIT_TAG_TYPES_EXIST
             ) from e
         return iter([])
-
-    @classmethod
-    def format(cls, tags: Iterator[str], config: Config) -> None:
-        pass
 
 
 class Add(Command):
@@ -402,11 +398,6 @@ class Add(Command):
             )
         return iter(added_tags)
 
-    @classmethod
-    def format(cls, tags: Iterator[str], config: Config) -> None:
-        for tag in tags:
-            print("Added new tag '{}'".format(tag), file=stderr)
-
 
 class Members(Command):
     NAME = "members"
@@ -461,10 +452,6 @@ class Members(Command):
             query = generate_query(cls.NO_PARENT)
         return (row["name"] for row in query(cursor))
 
-    @classmethod
-    def format(cls, tags: Iterator[str], config: Config) -> None:
-        print(" ".join(tags), file=stdout)
-
 
 class Categories(Command):
     NAME = "categories"
@@ -504,10 +491,6 @@ class Categories(Command):
             dict(tag=arguments.tag)
         )
         return (row["name"] for row in query(cursor))
-
-    @classmethod
-    def format(cls, tags: Iterator[str], config: Config) -> None:
-        print(" ".join(tags), file=stdout)
 
 
 RECURSIVE_MEMBERS = (
@@ -890,11 +873,6 @@ class Remove(Command):
                 ) from e
         return iter(removed_tags)
 
-    @classmethod
-    def format(cls, tags: Iterator[str], config: Config) -> None:
-        for tag in tags:
-            print("Removed tag '{}'".format(tag), file=stderr)
-
 
 class Validate(Command):
     NAME = "validate"
@@ -975,10 +953,6 @@ class Validate(Command):
             raise TagError("", cls.EXIT_NOTE_NOT_EXISTS)
         return iter([])
 
-    @classmethod
-    def format(cls, tags: Iterator[str], config: Config) -> None:
-        pass
-
 
 class Import(Command):
     NAME = "import"
@@ -1056,11 +1030,6 @@ class Import(Command):
                 ) from e
             destinations.append(str(name))
         return iter(destinations)
-
-    @classmethod
-    def format(cls, tags: Iterator[str], config: Config) -> None:
-        for tag in tags:
-            print(Path(config.notes_directory, tag), file=stderr)
 
 
 COMMANDS = (
