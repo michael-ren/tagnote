@@ -122,7 +122,7 @@ class Tag:
 
 
 class TagError(Exception):
-    def __init__(self, message: str, exit_status: int = 1) -> None:
+    def __init__(self, message: str, exit_status: int) -> None:
         super().__init__(message)
         self.exit_status = exit_status
 
