@@ -819,7 +819,7 @@ class Remove(Command):
         "        select id"
         "            from tags"
         "            where name = {tag}"
-        "    )"
+        "    ),"
         "    category_id (id) as ("
         "        select id"
         "            from tags"
