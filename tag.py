@@ -2,18 +2,20 @@
 
 from abc import ABCMeta, abstractmethod
 from argparse import ArgumentParser, Namespace
+from datetime import datetime
 from enum import Enum
 from json import load
-from os import environ
+from os import environ, scandir, stat_result
 from pathlib import Path
-from re import compile
-from shutil import which
+from re import compile, error as re_error
+from shutil import which, copy2
 from sqlite3 import connect, Cursor, Row, IntegrityError, OperationalError
 from subprocess import run as subprocess_run, CalledProcessError
 from sys import stdout, stderr, argv, exit
 from traceback import print_exc
 from typing import (
-    Sequence, Iterator, Optional, Callable, Mapping, Any, Tuple, TextIO
+    Sequence, Iterator, Optional, Callable, Mapping, Any, Tuple, TextIO, Set,
+    Pattern
 )
 
 
@@ -27,14 +29,11 @@ from typing import (
 #          - members start from present by default--we always start from the present and work backwards into the past through successive layers of interpretation
 
 
-# fix init and validate
-# validate notes not in db
-# show has regex filter
-
-
 class Config:
     EXIT_REQUIRED_PROPERTY = 11
+
     EXIT_CONSTRUCTOR_FAILED = 12
+
     EXIT_CHECK_FAILED = 13
 
     PROPERTIES = dict(
@@ -104,6 +103,7 @@ class Config:
 
 class TagType(Enum):
     NOTE = 1
+
     LABEL = 2
 
 
@@ -170,7 +170,42 @@ def generate_query(
     return execute
 
 
+def left_pad(text: str, length: int, padding: str) -> str:
+    if len(padding) != 1:
+        raise ValueError(
+            "Only single-character padding supported: '{}'".format(padding)
+        )
+    if len(text) > length:
+        raise ValueError(
+            "Text more than {} characters long: '{}'".format(length, text)
+        )
+    number_of_pads = length - len(text)
+    return (number_of_pads * padding) + text
+
+
 class Command(metaclass=ABCMeta):
+    EXIT_DB_EXISTS = 21
+
+    EXIT_TAG_TYPES_EXIST = 22
+
+    EXIT_NOTE_NOT_EXISTS = 23
+
+    EXIT_NOTE_EXISTS = 24
+
+    EXIT_BAD_NAME = 25
+
+    EXIT_BAD_RANGE = 26
+
+    EXIT_BAD_REGEX = 27
+
+    EXIT_EDITOR_FAILED = 28
+
+    EXIT_EXISTING_MAPPINGS = 29
+
+    EXIT_IMPORT_FILE_NOT_EXISTS = 30
+
+    EXIT_BAD_PERMISSIONS = 31
+
     @classmethod
     @abstractmethod
     def name(cls) -> str:
@@ -203,10 +238,6 @@ class Init(Command):
     NAME = "init"
 
     DESCRIPTION = "Initialize the tag database."
-
-    EXIT_DB_EXISTS = 21
-
-    EXIT_TAG_TYPES_EXIST = 22
 
     CREATE_TABLES = (
         "create table tags ("
@@ -269,7 +300,7 @@ class Init(Command):
                 " has the database already been created?",
                 cls.EXIT_TAG_TYPES_EXIST
             ) from e
-        yield from ()
+        return iter([])
 
     @classmethod
     def format(cls, tags: Iterator[str], config: Config) -> None:
@@ -280,8 +311,6 @@ class Add(Command):
     NAME = "add"
 
     DESCRIPTION = "Add members to a category."
-
-    EXIT_BAD_NAME = 21
 
     ADD_TAG = (
         "insert or ignore into tags (name, type)"
@@ -316,13 +345,22 @@ class Add(Command):
         )
 
     @classmethod
-    def add_tag(cls, cursor: Cursor, name: str) -> Tuple[int, bool]:
+    def add_tag(
+            cls, cursor: Cursor, name: str, config: Config
+            ) -> Tuple[int, bool]:
         try:
             tag_type = Tag.of(name).value
         except ValueError as e:
             raise TagError(
                 "Bad tag name {}".format(name), cls.EXIT_BAD_NAME
             ) from e
+        if tag_type == TagType.NOTE:
+            tag_path = Path(config.notes_directory, name)
+            if tag_path.is_file():
+                raise TagError(
+                    "Tag '{}' does not exist.".format(tag_path),
+                    cls.EXIT_NOTE_NOT_EXISTS
+                )
         cursor.execute(
             cls.ADD_TAG,
             dict(name=name, type=tag_type)
@@ -333,10 +371,9 @@ class Add(Command):
             changed = False
         else:
             raise RuntimeError(
-                "Error adding tag {}: {} rows modified".format(
+                "Error adding tag {}: {} rows modified.".format(
                     name, cursor.rowcount
-                ),
-                cls.EXIT_BAD_NAME
+                )
             )
         cursor.execute(
             cls.GET_ID,
@@ -349,21 +386,21 @@ class Add(Command):
     def run(
             cls, cursor: Cursor, arguments: Namespace, config: Config
             ) -> Iterator[str]:
-        new_members = []
+        added_tags = []
         category_id, category_changed = cls.add_tag(
-            cursor, arguments.category
+            cursor, arguments.category, config
         )
         if category_changed:
-            new_members.append(arguments.category)
+            added_tags.append(arguments.category)
         for member in arguments.members:
-            member_id, member_changed = cls.add_tag(cursor, member)
+            member_id, member_changed = cls.add_tag(cursor, member, config)
             if member_changed:
-                new_members.append(member)
+                added_tags.append(member)
             cursor.execute(
                 cls.ADD_MAPPING,
                 dict(category=category_id, member=member_id)
             )
-        yield from new_members
+        return iter(added_tags)
 
     @classmethod
     def format(cls, tags: Iterator[str], config: Config) -> None:
@@ -422,7 +459,7 @@ class Members(Command):
             )
         else:
             query = generate_query(cls.NO_PARENT)
-        yield from (row["name"] for row in query(cursor))
+        return (row["name"] for row in query(cursor))
 
     @classmethod
     def format(cls, tags: Iterator[str], config: Config) -> None:
@@ -466,7 +503,7 @@ class Categories(Command):
             cls.QUERY,
             dict(tag=arguments.tag)
         )
-        yield from (row["name"] for row in query(cursor))
+        return (row["name"] for row in query(cursor))
 
     @classmethod
     def format(cls, tags: Iterator[str], config: Config) -> None:
@@ -525,10 +562,6 @@ class Show(Command):
 
     DESCRIPTION = "Combine all notes into a single document."
 
-    EXIT_BAD_RANGE = 21
-
-    EXIT_FILE_NOT_FOUND = 22
-
     HEADER = "{}\n---\n"
 
     FOOTER = "\n***\n"
@@ -566,13 +599,17 @@ class Show(Command):
             "tags", nargs="*", help="The tags to combine, else all"
         )
         parser.add_argument(
-            "-r", "--range",
+            "--range", "-r",
             help="A continuous range of notes to show in Python slice notation"
         )
         parser.add_argument(
-            "-b", "--beginning",
+            "--beginning", "-b",
             action="store_true",
             help="List notes from beginning forward and not present backward"
+        )
+        parser.add_argument(
+            "--search", "-s",
+            help="A regex in the notes to filter on"
         )
 
     @classmethod
@@ -590,46 +627,102 @@ class Show(Command):
         return dict(limit=limit, offset=offset)
 
     @classmethod
+    def query_categories(
+            cls,
+            categories: Sequence[str],
+            note_type: TagType,
+            order: str,
+            limit: int,
+            offset: int
+            ) -> Callable[[Cursor], Iterator[Row]]:
+        return generate_query(
+            cls.NOTES_OF_CATEGORIES,
+            dict(
+                categories=categories,
+                note_type=note_type.value,
+                limit=limit,
+                offset=offset
+            ),
+            dict(order=order)
+        )
+
+    @classmethod
+    def query_all(
+            cls,
+            note_type: TagType,
+            order: str,
+            limit: int,
+            offset: int
+            ) -> Callable[[Cursor], Iterator[Row]]:
+        return generate_query(
+            cls.ALL_NOTES,
+            dict(
+                note_type=note_type.value,
+                limit=limit,
+                offset=offset
+            ),
+            dict(order=order)
+        )
+
+    @classmethod
+    def compile_regex(cls, pattern: Optional[str]) -> Optional[Pattern]:
+        if not pattern:
+            return None
+        try:
+            regex = compile(pattern)
+        except re_error as e:
+            raise TagError(
+                "Bad regex: '{}'".format(pattern), cls.EXIT_BAD_REGEX
+            ) from e
+        return regex
+
+    @classmethod
+    def filter_path(
+            cls, path: Path, regex: Optional[Pattern]
+            ) -> Optional[Path]:
+        if not path.is_file():
+            raise TagError(
+                "Could not open note at path: '{}'".format(path),
+                cls.EXIT_NOTE_NOT_EXISTS
+            )
+        if not regex:
+            return path
+        with path.open() as f:
+            for line in f:
+                if regex.search(line):
+                    return path
+        return None
+
+    @classmethod
     def run(
             cls, cursor: Cursor, arguments: Namespace, config: Config
             ) -> Iterator[str]:
         limit_offset = cls.limit_offset(arguments.range)
+        regex = cls.compile_regex(arguments.search)
         order = "asc" if arguments.beginning else "desc"
         if arguments.tags:
-            query = generate_query(
-                cls.NOTES_OF_CATEGORIES,
-                dict(
-                    categories=arguments.tags,
-                    note_type=TagType.NOTE.value,
-                    **limit_offset
-                ),
-                dict(order=order)
+            query = cls.query_categories(
+                arguments.tags, TagType.NOTE, order, **limit_offset
             )
         else:
-            query = generate_query(
-                cls.ALL_NOTES,
-                dict(
-                    note_type=TagType.NOTE.value,
-                    **limit_offset
-                ),
-                dict(order=order)
+            query = cls.query_all(
+                TagType.NOTE, order, **limit_offset
             )
-        yield from (row["name"] for row in query(cursor))
+        return (
+            row["name"] for row in query(cursor)
+            if cls.filter_path(
+                Path(config.notes_directory, row["name"]), regex
+            )
+        )
 
     @classmethod
     def print(cls, member: str, config: Config) -> None:
-        note_path = config.notes_directory / member
-        try:
-            with note_path.open() as f:
-                print(cls.HEADER.format(member), end="")
-                for line in f:
-                    print(line, end="")
-                print(cls.FOOTER, end="")
-        except FileNotFoundError as e:
-            raise TagError(
-                "Could not open note at path: '{}'".format(note_path),
-                cls.EXIT_FILE_NOT_FOUND
-            ) from e
+        note_path = Path(config.notes_directory, member)
+        with note_path.open() as f:
+            print(cls.HEADER.format(member), end="")
+            for line in f:
+                print(line, end="")
+            print(cls.FOOTER, end="")
 
     @classmethod
     def format(cls, tags: Iterator[str], config: Config) -> None:
@@ -641,8 +734,6 @@ class Last(Command):
     NAME = "last"
 
     DESCRIPTION = "Open the last note in a text editor."
-
-    EXIT_EDITOR_FAILED = 21
 
     ALL_NOTES = (
         "select name"
@@ -691,12 +782,18 @@ class Last(Command):
                 cls.ALL_NOTES,
                 dict(note_type=TagType.NOTE.value)
             )
-        yield from (row["name"] for row in query(cursor))
+        return (row["name"] for row in query(cursor))
 
     @classmethod
     def format(cls, tags: Iterator[str], config: Config) -> None:
         for tag in tags:
-            command = [*config.editor, tag]
+            tag_path = Path(config.notes_directory, tag)
+            if not tag_path.is_file():
+                raise TagError(
+                    "Note '{}' does not exist.".format(tag_path),
+                    cls.EXIT_NOTE_NOT_EXISTS
+                )
+            command = [*config.editor, str(tag_path)]
             try:
                 subprocess_run(command, check=True)
             except (CalledProcessError, FileNotFoundError) as e:
@@ -710,8 +807,6 @@ class Remove(Command):
     NAME = "remove"
 
     DESCRIPTION = "Remove a tag from categories or from everything."
-
-    EXIT_EXISTING_MAPPINGS = 21
 
     REMOVE_EVERYTHING = (
         "delete from tags"
@@ -750,14 +845,14 @@ class Remove(Command):
         parser.add_argument(
             "categories",
             nargs="*",
-            help="The categories to remove from, else everything"
+            help="The categories to remove from, else from the database"
         )
 
     @classmethod
     def run(
             cls, cursor: Cursor, arguments: Namespace, config: Config
             ) -> Iterator[str]:
-        results = []
+        removed_tags = []
         if arguments.categories:
             query = generate_query(
                 cls.REMOVE_CATEGORIES,
@@ -777,7 +872,7 @@ class Remove(Command):
             try:
                 query(cursor)
                 if cursor.rowcount == 1:
-                    results.append(arguments.tag)
+                    removed_tags.append(arguments.tag)
                 elif cursor.rowcount > 1:
                     raise RuntimeError(
                         "Removed more than one row deleting '{}'".format(
@@ -788,11 +883,12 @@ class Remove(Command):
                 raise TagError(
                     (
                         "Failed removing tag '{}'."
-                        " Try removing all of its categories and members first."
+                        " Try removing all of its categories and members"
+                        " first."
                     ).format(arguments.tag),
                     cls.EXIT_EXISTING_MAPPINGS
                 ) from e
-        yield from results
+        return iter(removed_tags)
 
     @classmethod
     def format(cls, tags: Iterator[str], config: Config) -> None:
@@ -804,8 +900,6 @@ class Validate(Command):
     NAME = "validate"
 
     DESCRIPTION = "Check that all notes exist; print missing notes."
-
-    EXIT_MISSING_NOTE = 21
 
     ALL_NOTES = (
         "select name"
@@ -831,26 +925,142 @@ class Validate(Command):
         )
 
     @classmethod
+    def notes_in_filesystem(cls, config: Config) -> Set[Path]:
+        notes = set()
+        for path in scandir(config.notes_directory):
+            if path.is_file():
+                try:
+                    if Tag.of(path.name) == TagType.NOTE:
+                        notes.add(Path(path.path))
+                except ValueError:
+                    continue
+        return notes
+
+    @classmethod
+    def max_notes_reached(cls, maximum: int, missing: int) -> bool:
+        return maximum >= 0 and (maximum == 0 or missing >= maximum)
+
+    @classmethod
+    def format_missing_note(cls, note: Path, type_: str, maximum: int) -> None:
+        if maximum != 0:
+            print("{}: {}".format(type_, note), file=stderr)
+
+    @classmethod
     def run(
             cls, cursor: Cursor, arguments: Namespace, config: Config
             ) -> Iterator[str]:
+        fs_notes = cls.notes_in_filesystem(config)
+
         cursor.execute(cls.ALL_NOTES, dict(note_type=TagType.NOTE.value))
+
         missing = 0
         for row in cursor:
-            if missing >= arguments.max > 0:
-                break
-            note_path = Path(config.notes_directory, row["name"])
-            if not note_path.is_file():
+            note = Path(config.notes_directory, row["name"])
+            if note in fs_notes:
+                fs_notes.remove(note)
+            else:
                 missing += 1
-                if arguments.max != 0:
-                    print(row["name"], file=stderr)
+                cls.format_missing_note(note, "db", arguments.max)
+                if cls.max_notes_reached(arguments.max, missing):
+                    break
+
+        if not cls.max_notes_reached(arguments.max, missing):
+            for note in fs_notes:
+                missing += 1
+                cls.format_missing_note(note, "fs", arguments.max)
+                if cls.max_notes_reached(arguments.max, missing):
+                    break
+
         if missing > 0:
-            raise TagError("Missing notes", cls.EXIT_MISSING_NOTE)
-        yield from ()
+            raise TagError("", cls.EXIT_NOTE_NOT_EXISTS)
+        return iter([])
 
     @classmethod
     def format(cls, tags: Iterator[str], config: Config) -> None:
         pass
+
+
+class Import(Command):
+    NAME = "import"
+
+    DESCRIPTION = "Copy text files into the notes directory in proper format."
+
+    @classmethod
+    def name(cls) -> str:
+        return cls.NAME
+
+    @classmethod
+    def description(cls) -> str:
+        return cls.DESCRIPTION
+
+    @classmethod
+    def arguments(cls, parser: ArgumentParser) -> None:
+        parser.add_argument(
+            "files",
+            nargs="+",
+            help="The text files to import",
+            type=Path
+        )
+
+    @classmethod
+    def stat(cls, path: Path) -> stat_result:
+        try:
+            stat = path.stat()
+        except FileNotFoundError as e:
+            raise TagError(
+                "Could not find file: '{}'".format(path),
+                cls.EXIT_IMPORT_FILE_NOT_EXISTS
+            ) from e
+        except PermissionError as e:
+            raise TagError(
+                "Could not read file: '{}'".format(path),
+                cls.EXIT_BAD_PERMISSIONS
+            ) from e
+        return stat
+
+    @classmethod
+    def filename(cls, timestamp: datetime) -> Path:
+        name = (
+            "{year}-{month}-{day}_{hour}-{minute}-{second}.txt".format(
+                year=left_pad(str(timestamp.year), 4, "0"),
+                month=left_pad(str(timestamp.month), 2, "0"),
+                day=left_pad(str(timestamp.day), 2, "0"),
+                hour=left_pad(str(timestamp.hour), 2, "0"),
+                minute=left_pad(str(timestamp.minute), 2, "0"),
+                second=left_pad(str(timestamp.second), 2, "0")
+            )
+        )
+        return Path(name)
+
+    @classmethod
+    def run(
+            cls, cursor: Cursor, arguments: Namespace, config: Config
+            ) -> Iterator[str]:
+        destinations = []
+        for path in arguments.files:
+            stat = cls.stat(path)
+            timestamp = datetime.fromtimestamp(stat.st_mtime)
+            name = cls.filename(timestamp)
+            destination = Path(config.notes_directory, name)
+            if destination.exists():
+                raise TagError(
+                    "Note already exists: '{}'".format(destination),
+                    cls.EXIT_NOTE_EXISTS
+                )
+            try:
+                copy2(str(path), str(destination))
+            except PermissionError as e:
+                raise TagError(
+                    "Could not write to file: '{}'".format(destination),
+                    cls.EXIT_BAD_PERMISSIONS
+                ) from e
+            destinations.append(str(name))
+        return iter(destinations)
+
+    @classmethod
+    def format(cls, tags: Iterator[str], config: Config) -> None:
+        for tag in tags:
+            print(Path(config.notes_directory, tag), file=stderr)
 
 
 COMMANDS = (
@@ -861,7 +1071,8 @@ COMMANDS = (
     Show,
     Last,
     Remove,
-    Validate
+    Validate,
+    Import
 )
 
 
@@ -878,7 +1089,7 @@ def argument_parser() -> ArgumentParser:
         help="Print more verbose error messages",
         action="store_true"
     )
-    action = parser.add_subparsers(metavar="command")
+    action = parser.add_subparsers(metavar="command", dest="command")
 
     for command in COMMANDS:
         command_parser = action.add_parser(
@@ -903,13 +1114,18 @@ def handle_tag_error(error: TagError, debug: bool=False) -> None:
     if debug:
         print_exc()
     else:
-        print(error, file=stderr)
+        if str(error):
+            print(error, file=stderr)
     exit(error.exit_status)
 
 
 def run(args: Sequence[str]) -> None:
     parser = argument_parser()
     args = parser.parse_args(args)
+
+    if not args.command:
+        parser.print_help(stderr)
+        exit(2)
 
     config = None
     try:
