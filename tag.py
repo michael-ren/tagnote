@@ -192,19 +192,21 @@ class Command(metaclass=ABCMeta):
 
     EXIT_NOTE_EXISTS = 24
 
-    EXIT_BAD_NAME = 25
+    EXIT_TAG_NOT_EXISTS = 25
 
-    EXIT_BAD_RANGE = 26
+    EXIT_BAD_NAME = 26
 
-    EXIT_BAD_REGEX = 27
+    EXIT_BAD_RANGE = 27
 
-    EXIT_EDITOR_FAILED = 28
+    EXIT_BAD_REGEX = 28
 
-    EXIT_EXISTING_MAPPINGS = 29
+    EXIT_EDITOR_FAILED = 29
 
-    EXIT_IMPORT_FILE_NOT_EXISTS = 30
+    EXIT_EXISTING_MAPPINGS = 30
 
-    EXIT_BAD_PERMISSIONS = 31
+    EXIT_IMPORT_FILE_NOT_EXISTS = 31
+
+    EXIT_BAD_PERMISSIONS = 32
 
     @classmethod
     @abstractmethod
@@ -306,7 +308,7 @@ class Init(Command):
 class Add(Command):
     NAME = "add"
 
-    DESCRIPTION = "Add members to a category."
+    DESCRIPTION = "Add categories to a tag."
 
     ADD_TAG = (
         "insert or ignore into tags (name, type)"
@@ -335,10 +337,25 @@ class Add(Command):
 
     @classmethod
     def arguments(cls, parser: ArgumentParser) -> None:
-        parser.add_argument("category", help="The category to add to")
+        parser.add_argument("tag", help="The tag to add")
         parser.add_argument(
-            "members", nargs="*", help="The members to add to the category"
+            "categories", nargs="*", help="The categories to add to the tag"
         )
+
+    @classmethod
+    def get_tag_id(cls, cursor: Cursor, name: str) -> Optional[int]:
+        cursor.execute(
+            cls.GET_ID,
+            dict(name=name)
+        )
+        tag_id = None
+        for row in cursor:
+            if tag_id is not None:
+                raise RuntimeError(
+                    "Duplicate entries for tag: '{}'".format(name)
+                )
+            tag_id = row["id"]
+        return tag_id
 
     @classmethod
     def add_tag(
@@ -371,11 +388,11 @@ class Add(Command):
                     name, cursor.rowcount
                 )
             )
-        cursor.execute(
-            cls.GET_ID,
-            dict(name=name)
-        )
-        tag_id = next(row["id"] for row in cursor)
+        tag_id = cls.get_tag_id(cursor, name)
+        if tag_id is None:
+            raise RuntimeError(
+                "Failed to add tag and return id: '{}'".format(name)
+            )
         return tag_id, changed
 
     @classmethod
@@ -383,18 +400,21 @@ class Add(Command):
             cls, cursor: Cursor, arguments: Namespace, config: Config
             ) -> Iterator[str]:
         added_tags = []
-        category_id, category_changed = cls.add_tag(
-            cursor, arguments.category, config
+        tag_id, tag_changed = cls.add_tag(
+            cursor, arguments.tag, config
         )
-        if category_changed:
-            added_tags.append(arguments.category)
-        for member in arguments.members:
-            member_id, member_changed = cls.add_tag(cursor, member, config)
-            if member_changed:
-                added_tags.append(member)
+        if tag_changed:
+            added_tags.append(arguments.tag)
+        for category in arguments.categories:
+            category_id = cls.get_tag_id(cursor, category)
+            if category_id is None:
+                raise TagError(
+                    "Could not find category: '{}'".format(category),
+                    cls.EXIT_TAG_NOT_EXISTS
+                )
             cursor.execute(
                 cls.ADD_MAPPING,
-                dict(category=category_id, member=member_id)
+                dict(category=category_id, member=tag_id)
             )
         return iter(added_tags)
 
