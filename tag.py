@@ -214,7 +214,7 @@ class MultipleColumn(Formatter):
             placeholder = "{}"
 
         for row in zip_longest(*tags_in_columns, fillvalue=""):
-            format_string = " ".join(
+            format_string = "".join(
                 [placeholder] * len(row)
             )
             print(format_string.format(*row), file=stdout)
