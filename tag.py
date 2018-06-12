@@ -231,7 +231,9 @@ class Command(metaclass=ABCMeta):
         pass
 
     @classmethod
-    def format(cls, tags: Iterator[str], config: Config) -> None:
+    def format(
+            cls, tags: Iterator[str], arguments: Namespace, config: Config
+            ) -> None:
         for tag in tags:
             print(tag, file=stdout)
 
@@ -602,16 +604,16 @@ class Show(Command):
             "tags", nargs="*", help="The tags to combine, else all"
         )
         parser.add_argument(
-            "--range", "-r",
+            "-r", "--range",
             help="A continuous range of notes to show in Python slice notation"
         )
         parser.add_argument(
-            "--beginning", "-b",
+            "-b", "--beginning",
             action="store_true",
             help="List notes from beginning forward and not present backward"
         )
         parser.add_argument(
-            "--search", "-s",
+            "-s", "--search",
             help="A regex in the notes to filter on"
         )
 
@@ -728,7 +730,9 @@ class Show(Command):
             print(cls.FOOTER, end="")
 
     @classmethod
-    def format(cls, tags: Iterator[str], config: Config) -> None:
+    def format(
+            cls, tags: Iterator[str], arguments: Namespace, config: Config
+            ) -> None:
         for tag in tags:
             cls.print(tag, config)
 
@@ -788,7 +792,9 @@ class Last(Command):
         return (row["name"] for row in query(cursor))
 
     @classmethod
-    def format(cls, tags: Iterator[str], config: Config) -> None:
+    def format(
+            cls, tags: Iterator[str], arguments: Namespace, config: Config
+            ) -> None:
         for tag in tags:
             tag_path = Path(config.notes_directory, tag)
             if not tag_path.is_file():
@@ -916,7 +922,7 @@ class Validate(Command):
     @classmethod
     def arguments(cls, parser: ArgumentParser) -> None:
         parser.add_argument(
-            "--max", "-m",
+            "-m", "--max",
             help="The maximum missing notes to print",
             default=10,
             type=int
@@ -1068,13 +1074,13 @@ COMMANDS = (
 def argument_parser() -> ArgumentParser:
     parser = ArgumentParser()
     parser.add_argument(
-        "--config", "-c",
+        "-c", "--config",
         help="The configuration file to use",
         default=Path("tag.config.json"),
         type=Path
     )
     parser.add_argument(
-        "--debug", "-d",
+        "-d", "--debug",
         help="Print more verbose error messages",
         action="store_true"
     )
@@ -1128,7 +1134,7 @@ def run(args: Sequence[str]) -> None:
         cursor.execute("pragma foreign_keys = 1;")
         try:
             results = args.run(cursor, args, config)
-            args.format(results, config)
+            args.format(results, args, config)
         except TagError as e:
             handle_tag_error(e, args.debug)
 
