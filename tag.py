@@ -4,11 +4,12 @@ from abc import ABCMeta, abstractmethod
 from argparse import ArgumentParser, Namespace
 from datetime import datetime
 from enum import Enum
+from itertools import zip_longest
 from json import load
 from os import environ, scandir, stat_result
 from pathlib import Path
 from re import compile, error as re_error
-from shutil import which, copy2
+from shutil import which, copy2, get_terminal_size
 from sqlite3 import connect, Cursor, Row, IntegrityError, OperationalError
 from subprocess import run as subprocess_run, CalledProcessError
 from sys import stdout, stderr, argv, exit
@@ -183,6 +184,49 @@ def left_pad(text: str, length: int, padding: str) -> str:
     return (number_of_pads * padding) + text
 
 
+class Formatter(metaclass=ABCMeta):
+    PADDING = 20
+
+    @classmethod
+    @abstractmethod
+    def format(cls, items: Iterator[str]) -> None:
+        pass
+
+
+class MultipleColumn(Formatter):
+    @classmethod
+    def format(cls, items: Iterator[str]) -> None:
+        all_items = tuple(items)
+        if not all_items:
+            return
+        column_width = max(len(item) for item in all_items) + cls.PADDING
+        term_width = get_terminal_size().columns
+        columns_per_line = term_width // column_width or 1
+        column_height = len(all_items) // columns_per_line + 1
+        tags_in_columns = [
+            all_items[i: i + column_height]
+            for i in range(0, len(all_items), column_height)
+        ]
+
+        if term_width >= column_width:
+            placeholder = "{{:<{}}}".format(column_width)
+        else:
+            placeholder = "{}"
+
+        for row in zip_longest(*tags_in_columns, fillvalue=""):
+            format_string = " ".join(
+                [placeholder] * len(row)
+            )
+            print(format_string.format(*row), file=stdout)
+
+
+class SingleColumn(Formatter):
+    @classmethod
+    def format(cls, items: Iterator[str]) -> None:
+        for item in items:
+            print(item, file=stdout)
+
+
 class Command(metaclass=ABCMeta):
     EXIT_DB_EXISTS = 21
 
@@ -234,8 +278,11 @@ class Command(metaclass=ABCMeta):
     def format(
             cls, tags: Iterator[str], arguments: Namespace, config: Config
             ) -> None:
-        for tag in tags:
-            print(tag, file=stdout)
+        if arguments.single_column:
+            formatter = SingleColumn
+        else:
+            formatter = MultipleColumn
+        formatter.format(tags)
 
 
 class Init(Command):
@@ -1082,6 +1129,11 @@ def argument_parser() -> ArgumentParser:
     parser.add_argument(
         "-d", "--debug",
         help="Print more verbose error messages",
+        action="store_true"
+    )
+    parser.add_argument(
+        "-sc", "--single-column",
+        help="Print results in a single column",
         action="store_true"
     )
     action = parser.add_subparsers(metavar="command", dest="command")
