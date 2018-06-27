@@ -655,7 +655,7 @@ class Show(Command):
         )
         parser.add_argument(
             "-r", "--range",
-            help="A continuous range of notes to show in Python slice notation"
+            help="A continuous range of notes to show in slice notation"
         )
         parser.add_argument(
             "-b", "--beginning",
