@@ -39,13 +39,13 @@ class Config:
 
     PROPERTIES = dict(
         db_file=dict(
-            default=Path("tags.sqlite"),
-            constructor=Path,
+            default=Path("notes/tags.sqlite"),
+            constructor=lambda p: Path(Path.home(), p),
             check=None
         ),
         notes_directory=dict(
-            default=Path("."),
-            constructor=Path,
+            default=Path("notes"),
+            constructor=lambda p: Path(Path.home(), p),
             check=lambda v: v.is_dir(),
             check_string="must be an existing directory"
         ),
@@ -1126,7 +1126,7 @@ def argument_parser() -> ArgumentParser:
     parser.add_argument(
         "-c", "--config",
         help="The configuration file to use",
-        default=Path("tag.config.json"),
+        default=Path(Path.home(), ".tag.config.json"),
         type=Path
     )
     parser.add_argument(
