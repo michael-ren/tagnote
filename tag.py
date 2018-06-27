@@ -58,9 +58,9 @@ class Config:
     )
 
     def __init__(self, file: Optional[TextIO]=None) -> None:
-        self.db_file = None
-        self.notes_directory = None
-        self.editor = None
+        self.db_file: Optional[Path] = None
+        self.notes_directory: Optional[Path] = None
+        self.editor: Optional[Sequence[str]] = None
 
         config_file = {}
         if file:
