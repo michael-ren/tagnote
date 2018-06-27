@@ -19,10 +19,6 @@ from typing import (
     Pattern
 )
 
-
-#TODO: implement editor support in vim:
-#          - get file name, write file name, add file name to tags mentioned if any
-#          - split this into :W to write with timestamp, :T to add file to any tags, :R to remove any tags, :L to list any tags
 #          - journal, bookmarks, note-taking, research, todo list
 #          - solve problem of naming, get it in first, decide how to label it later
 #          - additions to a note should be linked as children of a note
