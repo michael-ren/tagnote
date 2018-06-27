@@ -1180,6 +1180,10 @@ def run(args: Sequence[str]) -> None:
     config = None
     try:
         config = read_config_file(Path(args.config))
+        if args.command != Init.name() and not config.db_file.is_file():
+            raise TagError(
+                "Database does not exist: {}".format(config.db_file), 3
+            )
     except TagError as e:
         handle_tag_error(e, args.debug)
 
