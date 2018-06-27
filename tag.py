@@ -78,6 +78,9 @@ class Config:
                     self.EXIT_REQUIRED_PROPERTY
                 )
 
+            if constructor and default is not None:
+                default = constructor(default)
+
             if constructor and config_file_value is not None:
                 try:
                     config_file_value = constructor(config_file_value)
