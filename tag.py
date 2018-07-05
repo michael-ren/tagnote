@@ -975,7 +975,7 @@ def compile_regex(pattern: str) -> Pattern:
     return regex
 
 
-def parse_slice(text: str) -> Union[int, slice]:
+def parse_slice(text: str) -> slice:
     if not text.strip():
         raise ValueError("Empty slice")
     components = text.split(":")
@@ -986,7 +986,7 @@ def parse_slice(text: str) -> Union[int, slice]:
     else:
         start = 0
     if len(components) == 1:
-        return start
+        return slice(start, start + 1)
     if components[1]:
         end = int(components[1])
     else:
