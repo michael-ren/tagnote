@@ -282,7 +282,7 @@ class Label(Tag):
         members = list(set(self.members()))
         members.sort()
         add_index = bisect_left(members, tag)
-        if members[add_index] != tag:
+        if add_index >= len(members) or members[add_index] != tag:
             changed = True
             members.insert(add_index, tag)
         else:
