@@ -135,6 +135,9 @@ class Tag:
         self.name = name
         self.directory = directory
 
+    def __hash__(self):
+        return hash((self.name, self.directory))
+
     def __eq__(self, other):
         return self.name == other.name and self.directory == other.directory
 
