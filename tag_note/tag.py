@@ -144,6 +144,12 @@ class Tag:
     def __ne__(self, other):
         return self.name != other.name or self.directory != other.directory
 
+    def __str__(self):
+        return str(Path(self.directory, self.name))
+
+    def __repr__(self):
+        return "{}('{}')".format(type(self).__name__, self.__str__())
+
     def __lt__(self, other):
         return self.name < other.name
 
