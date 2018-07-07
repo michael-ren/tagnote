@@ -9,6 +9,6 @@ function WriteAsDate(...)
     let tags = l:tags . " " . shellescape(l:arg)
   endfor
   execute 'write ' . g:NOTES_DIRECTORY . "/" . l:filename
-  execute '!tag add ' . l:filename . l:tags
+  echom system('tag -r :0 add ' . l:filename . l:tags)
 endfunction
 
