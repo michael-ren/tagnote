@@ -362,7 +362,7 @@ def all_tags(
         directory: Path, tag_type: Optional[Type[Tag]]=None
         ) -> Iterator[Tag]:
     all_files = (
-        entry.name for entry in scandir(directory) if entry.is_file()
+        entry.name for entry in scandir(str(directory)) if entry.is_file()
     )
     tags = (
         tag_of(file, directory) for file in all_files
