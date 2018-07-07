@@ -41,9 +41,9 @@ class Config:
     )
 
     def __init__(self, file: Optional[TextIO]=None) -> None:
-        self.notes_directory: Optional[Path] = None
-        self.editor: Optional[Sequence[str]] = None
-        self.rsync: Optional[Sequence[str]] = None
+        self.notes_directory = None  # type: Optional[Path]
+        self.editor = None  # type: Optional[Sequence[str]]
+        self.rsync = None  # type: Optional[Sequence[str]]
 
         config_file = {}
         if file:
@@ -536,7 +536,7 @@ class Add(Command):
     @classmethod
     def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
         tag = tag_of(arguments.tag, config.notes_directory)
-        to_add: OrderedDict[Tag, Any] = OrderedDict()
+        to_add = OrderedDict()  # type: OrderedDict[Tag, Any]
         for category_name in set(arguments.categories):
             try:
                 category = tag_of(category_name, config.notes_directory)
@@ -1043,7 +1043,7 @@ def run(args: Sequence[str]) -> None:
     args = parser.parse_args(args)
 
     try:
-        command: Command = args.command
+        command = args.command  # type: Command
     except AttributeError:
         parser.print_help(stderr)
         exit(TagError.EXIT_USAGE)
@@ -1051,7 +1051,7 @@ def run(args: Sequence[str]) -> None:
 
     try:
         config = read_config_file(Path(args.config))
-        results: Iterator[Tag] = command.run(args, config)
+        results = command.run(args, config)  # type: Iterator[Tag]
         results = run_search(results, args)
         results = run_order_range(results, args, command)
         if args.single_column:
