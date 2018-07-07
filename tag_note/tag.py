@@ -881,6 +881,14 @@ class Import(Command):
         return iter(destinations)
 
 
+def check_rsync(rsync_command: Sequence[str]) -> None:
+    if which(rsync_command[0]) is None:
+        raise TagError(
+            "Could not find rsync command: {}".format(rsync_command),
+            TagError.EXIT_UNSUPPORTED_OPERATION
+        )
+
+
 class Pull(Command):
     NAME = "pull"
 
@@ -900,11 +908,7 @@ class Pull(Command):
 
     @classmethod
     def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
-        if which(config.rsync[0]) is None:
-            raise TagError(
-                "Could not find rsync command: {}".format(config.rsync),
-                TagError.EXIT_UNSUPPORTED_OPERATION
-            )
+        check_rsync(config.rsync)
         if config.utc:
             now = datetime.utcnow()
         else:
@@ -921,6 +925,42 @@ class Pull(Command):
         return iter([])
 
 
+class Push(Command):
+    NAME = "push"
+
+    DESCRIPTION = "Upload notes using rsync."
+
+    @classmethod
+    def name(cls) -> str:
+        return cls.NAME
+
+    @classmethod
+    def description(cls) -> str:
+        return cls.DESCRIPTION
+
+    @classmethod
+    def arguments(cls, parser: ArgumentParser) -> None:
+        parser.add_argument("dest_directory", help="The destination directory")
+
+    @classmethod
+    def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
+        check_rsync(config.rsync)
+        if config.utc:
+            now = datetime.utcnow()
+        else:
+            now = datetime.now()
+        subprocess_run(
+            [
+                *config.rsync,
+                "-rtbv",
+                "--suffix={}.bak".format(format_timestamp(now)),
+                "{}/".format(config.notes_directory),
+                "{}/".format(arguments.dest_directory)
+            ]
+        )
+        return iter([])
+
+
 COMMANDS = (
     Add,
     Members,
@@ -929,7 +969,8 @@ COMMANDS = (
     Last,
     Remove,
     Import,
-    Pull
+    Pull,
+    Push
 )
 
 
