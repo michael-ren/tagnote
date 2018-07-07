@@ -37,6 +37,11 @@ class Config:
             default=["rsync"],
             check=lambda v: isinstance(v, Sequence),
             check_string="must be a command"
+        ),
+        utc=dict(
+            default=False,
+            check=lambda v: isinstance(v, bool),
+            check_string="must be either true or false"
         )
     )
 
@@ -44,6 +49,7 @@ class Config:
         self.notes_directory = None  # type: Optional[Path]
         self.editor = None  # type: Optional[Sequence[str]]
         self.rsync = None  # type: Optional[Sequence[str]]
+        self.utc = None  # type: Optional[bool]
 
         config_file = {}
         if file:
@@ -853,7 +859,10 @@ class Import(Command):
         destinations = []
         for path in arguments.files:
             stat = cls.stat(path)
-            timestamp = datetime.fromtimestamp(stat.st_mtime)
+            if config.utc:
+                timestamp = datetime.utcfromtimestamp(stat.st_mtime)
+            else:
+                timestamp = datetime.fromtimestamp(stat.st_mtime)
             name = cls.filename(timestamp)
             destination = Path(config.notes_directory, name)
             if destination.exists():
@@ -896,11 +905,15 @@ class Pull(Command):
                 "Could not find rsync command: {}".format(config.rsync),
                 TagError.EXIT_UNSUPPORTED_OPERATION
             )
+        if config.utc:
+            now = datetime.utcnow()
+        else:
+            now = datetime.now()
         subprocess_run(
             [
                 *config.rsync,
                 "-rtbv",
-                "--suffix={}.bak".format(format_timestamp(datetime.now())),
+                "--suffix={}.bak".format(format_timestamp(now)),
                 "{}/".format(arguments.source_directory),
                 "{}/".format(config.notes_directory)
             ]
