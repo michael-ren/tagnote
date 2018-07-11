@@ -423,7 +423,7 @@ def all_tags(
     return tags
 
 
-class AllMembers(Iterator):
+class AllTagsFrom(Iterator):
     def __init__(
             self, category: Tag, tag_type: Optional[Type[Tag]]=None
             ) -> None:
@@ -431,8 +431,7 @@ class AllMembers(Iterator):
         self.tag_type = tag_type
         self.visited = set()
         self.remaining = OrderedDict()
-        for member in category.members():
-            self.remaining.setdefault(member)
+        self.remaining.setdefault(category)
 
     def __next__(self):
         while self.remaining:
@@ -447,19 +446,12 @@ class AllMembers(Iterator):
         raise StopIteration
 
 
-def all_unique_notes(tags: Iterable[Tag]) -> Iterator[Tag]:
-    members = set()
-    for tag in set(tags):
-        if isinstance(tag, Note):
-            members.add(tag)
-        elif isinstance(tag, Label):
-            members.update(AllMembers(tag, Note))
-        else:
-            raise TagError(
-                "Unknown type for tag: '{}'".format(tag.name),
-                TagError.EXIT_BAD_NAME
-            )
-    return iter(members)
+def all_unique_notes(roots: Iterable[Tag]) -> Iterator[Note]:
+    notes = set()
+    for root in roots:
+        for note in AllTagsFrom(root, Note):
+            notes.add(note)
+    return iter(notes)
 
 
 def left_pad(text: str, length: int, padding: str) -> str:
