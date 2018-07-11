@@ -514,7 +514,7 @@ class MultipleColumn(Formatter):
             format_string = "".join(
                 [placeholder] * len(row)
             )
-            print(format_string.format(*row), file=stdout)
+            print(format_string.format(*row).rstrip(), file=stdout)
 
 
 class SingleColumn(Formatter):
