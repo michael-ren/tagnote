@@ -201,6 +201,11 @@ class Tag:
     def exists(self) -> bool:
         return self.path().is_file()
 
+    def check_exists(self) -> bool:
+        if not self.exists():
+            raise self.not_exists_error()
+        return True
+
     def categories(self) -> Iterator["Tag"]:
         matches = (
             tag for tag in all_tags(self.directory)
@@ -220,6 +225,10 @@ class Tag:
 
     @abstractmethod
     def create(self) -> bool:
+        pass
+
+    @abstractmethod
+    def not_exists_error(self) -> TagError:
         pass
 
     @abstractmethod
@@ -253,12 +262,14 @@ class Note(Tag):
         return cls.PATTERN
 
     def create(self) -> bool:
-        if not self.exists():
-            raise TagError(
-                "Note '{}' does not exist".format(self.path()),
-                TagError.EXIT_NOTE_NOT_EXISTS
-            )
+        self.check_exists()
         return False
+
+    def not_exists_error(self) -> TagError:
+        return TagError(
+            "Note '{}' does not exist".format(self.path()),
+            TagError.EXIT_NOTE_NOT_EXISTS
+        )
 
     def add_member(self, tag: "Tag") -> bool:
         raise TagError(
@@ -273,19 +284,15 @@ class Note(Tag):
         )
 
     def members(self) -> Iterator["Tag"]:
+        self.check_exists()
         return iter([])
 
     def search_text(self, pattern: Pattern) -> bool:
-        try:
-            with self.path().open() as f:
-                for line in f:
-                    if pattern.search(line):
-                        return True
-        except FileNotFoundError as e:
-            raise TagError(
-                "Note '{}' does not exist".format(self.path()),
-                TagError.EXIT_NOTE_NOT_EXISTS
-            ) from e
+        self.check_exists()
+        with self.path().open() as f:
+            for line in f:
+                if pattern.search(line):
+                    return True
         return False
 
 
@@ -308,6 +315,12 @@ class Label(Tag):
         except FileExistsError:
             return False
         return True
+
+    def not_exists_error(self) -> TagError:
+        return TagError(
+            "Label '{}' does not exist".format(self.path()),
+            TagError.EXIT_LABEL_NOT_EXISTS
+        )
 
     def write_members(self, members: Iterable["Tag"]) -> None:
         with self.path().open("w") as f:
@@ -337,16 +350,13 @@ class Label(Tag):
         return changed
 
     def members(self) -> Iterator["Tag"]:
-        try:
-            with self.path().open() as f:
-                members = f.readlines()
-        except FileNotFoundError as e:
-            raise TagError(
-                "Label '{}' does not exist".format(self.path()),
-                TagError.EXIT_LABEL_NOT_EXISTS
-            ) from e
+        self.check_exists()
+        with self.path().open() as f:
+            members = f.readlines()
         return (
-            tag_of(member.strip(), self.directory) for member in members
+            tag_of(member.strip(), self.directory)
+            for member in members
+            if tag_of(member.strip(), self.directory).check_exists()
         )
 
     def search_text(self, pattern: Pattern) -> bool:
@@ -592,11 +602,7 @@ class Add(Command):
                     "Categories must be labels: '{}'".format(category_name),
                     TagError.EXIT_UNSUPPORTED_OPERATION
                 )
-            if not category.exists():
-                raise TagError(
-                    "Could not find category: '{}'".format(category_name),
-                    TagError.EXIT_LABEL_NOT_EXISTS
-                )
+            category.check_exists()
             to_add.setdefault(category)
         changed = tag.create()
         for category in to_add.keys():
@@ -765,11 +771,6 @@ class Last(Command):
             formatter: Type[Formatter]
             ) -> None:
         for tag in tags:
-            if not tag.exists():
-                raise TagError(
-                    "Note '{}' does not exist.".format(tag.name),
-                    TagError.EXIT_NOTE_NOT_EXISTS
-                )
             command = [*config.editor, str(tag.path())]
             try:
                 subprocess_run(command, check=True)
@@ -817,11 +818,7 @@ class Remove(Command):
                         ),
                         TagError.EXIT_UNSUPPORTED_OPERATION
                     )
-                if not category.exists():
-                    raise TagError(
-                        "Could not find category: '{}'".format(category_name),
-                        TagError.EXIT_LABEL_NOT_EXISTS
-                    )
+                category.check_exists()
                 to_remove.append(category)
             for category in to_remove:
                 category.remove_member(tag)
