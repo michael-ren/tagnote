@@ -590,13 +590,7 @@ class Add(Command):
         tag = tag_of(arguments.tag, config.notes_directory)
         to_add = OrderedDict()  # type: OrderedDict[Tag, Any]
         for category_name in set(arguments.categories):
-            try:
-                category = tag_of(category_name, config.notes_directory)
-            except ValueError as e:
-                raise TagError(
-                    "Invalid tag: '{}'".format(category_name),
-                    TagError.EXIT_BAD_NAME
-                ) from e
+            category = tag_of(category_name, config.notes_directory)
             if not isinstance(category, Label):
                 raise TagError(
                     "Categories must be labels: '{}'".format(category_name),
