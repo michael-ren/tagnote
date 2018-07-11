@@ -36,6 +36,9 @@ from typing import (
 )
 
 
+VERSION = "2.0.0"
+
+
 class Config:
     PROPERTIES = dict(
         notes_directory=dict(
@@ -1020,6 +1023,11 @@ def argument_parser() -> ArgumentParser:
         "-sc", "--single-column",
         help="Print results in a single column",
         action="store_true"
+    )
+    parser.add_argument(
+        "-v", "--version",
+        action="version",
+        version=VERSION
     )
     action = parser.add_subparsers(metavar="command")
 
