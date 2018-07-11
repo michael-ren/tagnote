@@ -20,7 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 from abc import ABCMeta, abstractmethod
 from argparse import ArgumentParser, Namespace
 from bisect import bisect_left
-from collections import OrderedDict, deque
+from collections import OrderedDict
 from datetime import datetime
 from itertools import zip_longest
 from json import load
@@ -429,19 +429,22 @@ class AllMembers(Iterator):
             ) -> None:
         self.category = category
         self.tag_type = tag_type
-        self.remaining = deque(
-            m for m in category.members() if valid_tag(m, tag_type)
-        )
+        self.visited = set()
+        self.remaining = OrderedDict()
+        for member in category.members():
+            self.remaining.setdefault(member)
 
     def __next__(self):
-        if not self.remaining:
-            raise StopIteration
-        # BFS
-        current_tag = self.remaining.popleft()
-        self.remaining.extend(
-            m for m in current_tag.members() if valid_tag(m, self.tag_type)
-        )
-        return current_tag
+        while self.remaining:
+            # BFS
+            current_tag, __ = self.remaining.popitem(last=False)
+            self.visited.add(current_tag)
+            for member in current_tag.members():
+                if member not in self.visited:
+                    self.remaining.setdefault(member)
+            if valid_tag(current_tag, self.tag_type):
+                return current_tag
+        raise StopIteration
 
 
 def all_unique_notes(tags: Iterable[Tag]) -> Iterator[Tag]:
