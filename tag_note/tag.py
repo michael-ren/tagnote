@@ -55,6 +55,7 @@ class Config:
         ),
         rsync=dict(
             default=["rsync"],
+            constructor=lambda v: [v] if isinstance(v, str) else v,
             check=lambda v: isinstance(v, Sequence),
             check_string="must be a command"
         ),
