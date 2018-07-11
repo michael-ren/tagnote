@@ -124,6 +124,8 @@ class TagError(Exception):
 
     EXIT_CONFIG_CHECK_FAILED = 13
 
+    EXIT_DIRECTORY_NOT_FOUND = 21
+
     EXIT_UNSUPPORTED_OPERATION = 22
 
     EXIT_NOTE_NOT_EXISTS = 23
@@ -394,8 +396,15 @@ def valid_tag(
 def all_tags(
         directory: Path, tag_type: Optional[Type[Tag]]=None
         ) -> Iterator[Tag]:
+    try:
+        directories = scandir(str(directory))
+    except FileNotFoundError as e:
+        raise TagError(
+            "Directory not found: '{}'".format(directory),
+            TagError.EXIT_DIRECTORY_NOT_FOUND
+        ) from e
     all_files = (
-        entry.name for entry in scandir(str(directory)) if entry.is_file()
+        entry.name for entry in directories if entry.is_file()
     )
     tags = (
         tag_of(file, directory) for file in all_files
