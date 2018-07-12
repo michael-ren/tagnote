@@ -7,6 +7,10 @@ let UTC = 0
 function WriteAsDate(...)
   if g:UTC
     let filename = system('date -u +%F_%H-%M-%S.txt')
+    if v:shell_error
+      echo "Could not get timestamp\n\n" . filename
+      return
+    endif
   else
     let filename = strftime('%F_%H-%M-%S.txt')
   endif
@@ -14,17 +18,16 @@ function WriteAsDate(...)
   for arg in a:000
     let check = system('tag -r :0 members' . ' ' . shellescape(l:arg))
     if v:shell_error
-      echo check
-      break
+      echo 'Could not find category' . " '" . l:arg . "' " . "\n\n" . check
+      return
     endif
     let tags = l:tags . ' ' . shellescape(l:arg)
   endfor
-  if !v:shell_error
-    execute 'write ' . g:NOTES_DIRECTORY . '/' . l:filename
-    let result = system('tag -r :0 add ' . l:filename . l:tags)
-    if v:shell_error
-      echo result
-    endif
+  execute 'write ' . g:NOTES_DIRECTORY . '/' . l:filename
+  let result = system('tag -r :0 add ' . l:filename . l:tags)
+  if v:shell_error
+    echo "Could not add note\n\n" . result
+    return
   endif
 endfunction
 
