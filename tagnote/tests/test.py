@@ -25,7 +25,7 @@ from re import compile as re_compile
 from typing import Sequence, TextIO
 from os import terminal_size
 
-from tag_note.tag import (
+from tagnote.tag import (
     Note, Label, tag_of, TagError, Config, valid_tag, all_tags, AllTagsFrom,
     all_unique_notes, left_pad, format_timestamp, MultipleColumn, SingleColumn
 )
@@ -399,9 +399,9 @@ class TestFormat(TestCase):
         def get_terminal_size():
             return terminal_size([10, 10])
         stdout = StringIO()
-        with patch("tag_note.tag.get_terminal_size", new=get_terminal_size):
-            with patch("tag_note.tag.stdout", new=stdout):
-                with patch("tag_note.tag.MultipleColumn.PADDING", new=1):
+        with patch("tagnote.tag.get_terminal_size", new=get_terminal_size):
+            with patch("tagnote.tag.stdout", new=stdout):
+                with patch("tagnote.tag.MultipleColumn.PADDING", new=1):
                     MultipleColumn.format(["1", "10", "110", "111", "112"])
                     self.assertEqual(
                         stdout.getvalue(),
@@ -414,9 +414,9 @@ class TestFormat(TestCase):
         def get_terminal_size():
             return terminal_size([1, 1])
         stdout = StringIO()
-        with patch("tag_note.tag.get_terminal_size", new=get_terminal_size):
-            with patch("tag_note.tag.stdout", new=stdout):
-                with patch("tag_note.tag.MultipleColumn.PADDING", new=1):
+        with patch("tagnote.tag.get_terminal_size", new=get_terminal_size):
+            with patch("tagnote.tag.stdout", new=stdout):
+                with patch("tagnote.tag.MultipleColumn.PADDING", new=1):
                     MultipleColumn.format(["hello", "1"])
                     self.assertEqual(
                         stdout.getvalue(),
@@ -425,7 +425,7 @@ class TestFormat(TestCase):
 
     def test_single_column(self):
         stdout = StringIO()
-        with patch("tag_note.tag.stdout", new=stdout):
+        with patch("tagnote.tag.stdout", new=stdout):
             SingleColumn.format(["single", "column", "format"])
             self.assertEqual(
                 stdout.getvalue(),

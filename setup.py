@@ -6,13 +6,13 @@ with open("README.rst") as f:
 
 
 setup(
-    name="tag_note",
+    name="tagnote",
     version="2.0.0",
     description="Minimalist note organization tool",
     long_description=readme,
     author="Michael Ren",
     author_email="michael.ren@mailbox.org",
-    packages=["tag_note"],
+    packages=["tagnote"],
     python_requires=">=3.5",
     license="GPLv3",
     classifiers=(
@@ -27,7 +27,7 @@ setup(
     ),
     entry_points={
         "console_scripts": [
-            'tag = tag_note.tag:main'
+            'tag = tagnote.tag:main'
         ]
     }
 )

@@ -1,5 +1,5 @@
-Tag: Minimalist Note Organization
-=================================
+Tagnote: Minimalist Note Organization
+=====================================
 
 Replace files like "asdflajsdf" in vim with timestamped .txt files::
 
@@ -20,14 +20,14 @@ Installation
 ------------
 If installing from PyPI::
 
-    pip3 install tag_note
+    pip3 install tagnote
 
 If installing from source::
 
     python3 setup.py sdist
     pip3 install -U dist/tagnote-$VERSION.$FORMAT
 
-To install the vim plugin, copy ``tag.vim`` to the ``~/.vim/plugin`` directory, creating the directory if needed.
+To install the vim plugin, copy ``tagnote.vim`` to the ``~/.vim/plugin`` directory, creating the directory if needed.
 
 Note-taking
 -----------
