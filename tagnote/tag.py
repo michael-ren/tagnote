@@ -32,7 +32,7 @@ from subprocess import run as subprocess_run, CalledProcessError
 from sys import stdout, stderr, argv, exit
 from traceback import print_exc
 from typing import (
-    Sequence, Iterator, Iterable, Optional, Any, TextIO, Pattern, Union, Type
+    Sequence, Iterator, Iterable, Optional, Any, TextIO, Pattern, Type, Tuple
 )
 
 
@@ -378,27 +378,32 @@ def tag_of(value: str, directory: Path) -> Tag:
     )
 
 
-def valid_tag(
-        value: Union[str, Tag], tag_type: Optional[Type[Tag]]=None
-        ) -> bool:
+def tag_types(tag_type: Optional[Type[Tag]]=None) -> Tuple[Type[Tag]]:
     if tag_type is not None:
         if tag_type not in TAG_TYPES:
             raise TypeError("Not a valid tag type: '{}'".format(tag_type))
         types = (tag_type,)
     else:
         types = TAG_TYPES
+    return types
 
-    if isinstance(value, str):
-        def test(t):
-            return t.match(value)
-    elif isinstance(value, Tag):
-        def test(t):
-            return isinstance(value, t)
-    else:
-        raise TypeError("Invalid value: '{}'".format(value))
 
+def valid_tag_instance(
+        instance: Tag, tag_type: Optional[Type[Tag]]=None
+        ) -> bool:
+    types = tag_types(tag_type)
     for type_ in types:
-        if test(type_):
+        if isinstance(instance, type_):
+            return True
+    return False
+
+
+def valid_tag_name(
+        name: str, tag_type: Optional[Type[Tag]]=None
+        ) -> bool:
+    types = tag_types(tag_type)
+    for type_ in types:
+        if type_.match(name):
             return True
     return False
 
@@ -418,7 +423,7 @@ def all_tags(
     )
     tags = (
         tag_of(file, directory) for file in all_files
-        if valid_tag(file, tag_type)
+        if valid_tag_name(file, tag_type)
     )
     return tags
 
@@ -441,7 +446,7 @@ class AllTagsFrom(Iterator):
             for member in current_tag.members():
                 if member not in self.visited:
                     self.remaining.setdefault(member)
-            if valid_tag(current_tag, self.tag_type):
+            if valid_tag_instance(current_tag, self.tag_type):
                 return current_tag
         raise StopIteration
 

@@ -26,8 +26,9 @@ from typing import Sequence, TextIO
 from os import terminal_size
 
 from tagnote.tag import (
-    Note, Label, tag_of, TagError, Config, valid_tag, all_tags, AllTagsFrom,
-    all_unique_notes, left_pad, format_timestamp, MultipleColumn, SingleColumn
+    Note, Label, tag_of, TagError, Config, all_tags, AllTagsFrom,
+    all_unique_notes, left_pad, format_timestamp, MultipleColumn, SingleColumn,
+    tag_types, valid_tag_instance, valid_tag_name
 )
 
 
@@ -219,17 +220,19 @@ class TestTag(TestCase):
             tag_of("todo.txt", Path())
 
         with self.assertRaises(TypeError):
-            valid_tag(1)
+            tag_types(1)
         with self.assertRaises(TypeError):
-            valid_tag("foo", Path)
-        self.assertTrue(valid_tag("foo", Label))
-        self.assertTrue(valid_tag(Label("foo", Path())), Label)
-        self.assertTrue(valid_tag("2018-10-10_10-10-10.txt", Note))
+            valid_tag_name("foo", Path)
+        with self.assertRaises(TypeError):
+            valid_tag_instance(Label("foo", Path()), Path)
+        self.assertTrue(valid_tag_name("foo", Label))
+        self.assertTrue(valid_tag_instance(Label("foo", Path())), Label)
+        self.assertTrue(valid_tag_name("2018-10-10_10-10-10.txt", Note))
         self.assertTrue(
-            valid_tag(Note("2018-10-10_10-10-10.txt", Path()), Note)
+            valid_tag_instance(Note("2018-10-10_10-10-10.txt", Path()), Note)
         )
-        self.assertTrue(valid_tag("bar"))
-        self.assertTrue(valid_tag(Label("bar", Path())))
+        self.assertTrue(valid_tag_name("bar"))
+        self.assertTrue(valid_tag_instance(Label("bar", Path())))
 
     def test_all_tags(self):
         with self.assertRaises(TagError):
