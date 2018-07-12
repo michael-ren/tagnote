@@ -1004,6 +1004,10 @@ def argument_parser() -> ArgumentParser:
         action="store_true"
     )
     parser.add_argument(
+        "-t", "--tag-name",
+        help="A regex for tag names to filter on"
+    )
+    parser.add_argument(
         "-s", "--search",
         help="A regex in the notes to filter on"
     )
@@ -1081,10 +1085,25 @@ def parse_slice(text: str) -> slice:
     return slice(start, end, step)
 
 
-def run_search(results: Iterable[Tag], args: Namespace) -> Iterator[Tag]:
+def run_filters(results: Iterable[Tag], args: Namespace) -> Iterator[Tag]:
     if args.search:
-        pattern = compile_regex(args.search)
-        results = (t for t in results if t.search_text(pattern))
+        search_pattern = compile_regex(args.search)
+
+        def search(t: Tag) -> bool:
+            return t.search_text(search_pattern)
+    else:
+        def search(__) -> bool:
+            return True
+    if args.tag_name:
+        tag_name_pattern = compile_regex(args.tag_name)
+
+        def tag_name(t: Tag) -> bool:
+            return bool(tag_name_pattern.search(t.name))
+    else:
+        def tag_name(__) -> bool:
+            return True
+
+    results = (t for t in results if search(t) and tag_name(t))
     return results
 
 
@@ -1133,7 +1152,7 @@ def run(args: Sequence[str]) -> None:
     try:
         config = read_config_file(Path(args.config))
         results = command.run(args, config)  # type: Iterator[Tag]
-        results = run_search(results, args)
+        results = run_filters(results, args)
         results = run_order_range(results, args, command)
         if args.single_column:
             formatter = SingleColumn
