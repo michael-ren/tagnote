@@ -153,3 +153,9 @@ By default, notes use local time for timestamps. To use UTC, update ``~/.tag.con
     "utc": true
     }
 
+Also update ``~/.vim/plugin/tagnote.vim``::
+
+    ...
+    let UTC = 1
+    ...
+
