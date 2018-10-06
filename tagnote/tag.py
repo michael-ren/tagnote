@@ -936,7 +936,7 @@ class Pull(Command):
             [
                 *config.rsync,
                 "-rtbv",
-                "--suffix={}.bak".format(format_timestamp(now)),
+                "--suffix=.{}.bak".format(format_timestamp(now)),
                 "{}/".format(arguments.source_directory),
                 "{}/".format(config.notes_directory)
             ]
