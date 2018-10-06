@@ -18,17 +18,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 from unittest import TestCase, main
 from unittest.mock import patch
 from io import StringIO
-from tempfile import TemporaryDirectory
+from tempfile import TemporaryDirectory, NamedTemporaryFile
 from datetime import datetime
 from pathlib import Path
 from re import compile as re_compile
 from typing import Sequence, TextIO
-from os import terminal_size
+from os import terminal_size, utime
+from json import dumps
 
 from tagnote.tag import (
     Note, Label, tag_of, TagError, Config, all_tags, AllTagsFrom,
     all_unique_notes, left_pad, format_timestamp, MultipleColumn, SingleColumn,
-    tag_types, valid_tag_instance, valid_tag_name
+    tag_types, valid_tag_instance, valid_tag_name,
+    argument_parser, Import
 )
 
 
@@ -433,6 +435,51 @@ class TestFormat(TestCase):
             self.assertEqual(
                 stdout.getvalue(),
                 "single\ncolumn\nformat\n"
+            )
+
+
+class TestCommandNoUTC(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.parser = argument_parser()
+
+    def setUp(self):
+        self.notes_directory = TemporaryDirectory()
+        self.config = Config(
+            StringIO(
+                dumps(
+                    {
+                        "notes_directory": self.notes_directory.name,
+                        "utc": False
+                    }
+                )
+            )
+        )
+
+    def tearDown(self):
+        self.notes_directory.cleanup()
+
+    def test_import(self):
+        with NamedTemporaryFile(dir=self.notes_directory.name) as tmp_file:
+            # 2018-10-06_16-17-30
+            seconds = 1538857050
+            utime(tmp_file.name, times=(seconds,seconds))
+
+            args = self.parser.parse_args(["import", tmp_file.name])
+            results = Import.run(args, self.config)
+            results = list(results)
+            self.assertEqual(1, len(results))
+            self.assertTrue(results[0].exists())
+            self.assertEqual(
+                "2018-10-06_16-17-30.txt",
+                results[0].name
+            )
+
+            with self.assertRaises(TagError) as e1:
+                Import.run(args, self.config)
+            self.assertEqual(
+                TagError.EXIT_NOTE_EXISTS,
+                e1.exception.exit_status
             )
 
 

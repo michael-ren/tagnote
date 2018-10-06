@@ -871,12 +871,11 @@ class Import(Command):
         return stat
 
     @classmethod
-    def filename(cls, timestamp: datetime) -> Path:
-        name = "{}.txt".format(format_timestamp(timestamp))
-        return Path(name)
+    def filename(cls, timestamp: datetime) -> str:
+        return "{}.txt".format(format_timestamp(timestamp))
 
     @classmethod
-    def run(cls, arguments: Namespace, config: Config) -> Iterator[str]:
+    def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
         destinations = []
         for path in arguments.files:
             stat = cls.stat(path)
@@ -884,21 +883,20 @@ class Import(Command):
                 timestamp = datetime.utcfromtimestamp(stat.st_mtime)
             else:
                 timestamp = datetime.fromtimestamp(stat.st_mtime)
-            name = cls.filename(timestamp)
-            destination = Path(config.notes_directory, name)
-            if destination.exists():
+            note = tag_of(cls.filename(timestamp), config.notes_directory)
+            if note.exists():
                 raise TagError(
-                    "Note already exists: '{}'".format(destination),
+                    "Note already exists: '{}'".format(note),
                     TagError.EXIT_NOTE_EXISTS
                 )
             try:
-                copy2(str(path), str(destination))
+                copy2(str(path), str(note))
             except PermissionError as e:
                 raise TagError(
-                    "Could not write to file: '{}'".format(destination),
+                    "Could not write to file: '{}'".format(note),
                     TagError.EXIT_BAD_PERMISSIONS
                 ) from e
-            destinations.append(str(name))
+            destinations.append(note)
         return iter(destinations)
 
 
