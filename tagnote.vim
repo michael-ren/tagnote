@@ -16,14 +16,9 @@ function WriteAsDate(...)
   endif
   let tags = ''
   for arg in a:000
-    let check = system('tag -r :0 members' . ' ' . shellescape(l:arg))
-    if v:shell_error
-      echo 'Could not find category' . " '" . l:arg . "' " . "\n\n" . check
-      return
-    endif
     let tags = l:tags . ' ' . shellescape(l:arg)
   endfor
-  execute 'write ' . g:NOTES_DIRECTORY . '/' . l:filename
+  execute 'saveas ' . g:NOTES_DIRECTORY . '/' . l:filename
   let result = system('tag -r :0 add ' . l:filename . l:tags)
   if v:shell_error
     echo "Could not add note\n\n" . result
