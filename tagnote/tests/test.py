@@ -30,7 +30,7 @@ from tagnote.tag import (
     Note, Label, tag_of, TagError, Config, all_tags, AllTagsFrom,
     all_unique_notes, left_pad, format_timestamp, MultipleColumn, SingleColumn,
     tag_types, valid_tag_instance, valid_tag_name,
-    argument_parser, Import
+    argument_parser, Add, Import
 )
 
 
@@ -458,6 +458,58 @@ class TestCommandNoUTC(TestCase):
 
     def tearDown(self):
         self.notes_directory.cleanup()
+
+    def test_add(self):
+        note_name = "2018-10-06_22-15-53.txt"
+
+        args = self.parser.parse_args(["add", note_name])
+        with self.assertRaises(TagError) as e1:
+            Add.run(args, self.config)
+        self.assertEqual(
+            TagError.EXIT_NOTE_NOT_EXISTS,
+            e1.exception.exit_status
+        )
+
+        note_path = Path(self.notes_directory.name, note_name)
+        with open(str(note_path), "w") as f:
+            f.write("")
+
+        args = self.parser.parse_args(["add", "base"])
+        results = Add.run(args, self.config)
+        results = list(results)
+        self.assertEqual(1, len(results))
+        self.assertTrue(results[0].exists())
+        self.assertEqual("base", results[0].name)
+
+        args = self.parser.parse_args(["add", note_name, "base"])
+        results = Add.run(args, self.config)
+        results = list(results)
+        self.assertEqual(0, len(results))
+
+        args = self.parser.parse_args(["add", "base", "todo"])
+        results = Add.run(args, self.config)
+        results = list(results)
+        self.assertEqual(1, len(results))
+        self.assertTrue(results[0].exists())
+        self.assertEqual("todo", results[0].name)
+
+        args = self.parser.parse_args(["add", "foo", "base"])
+        results = Add.run(args, self.config)
+        results = list(results)
+        self.assertEqual(1, len(results))
+        self.assertTrue(results[0].exists())
+        self.assertEqual("foo", results[0].name)
+
+        args = self.parser.parse_args(
+            ["add", "base", "life", "todo", "todo", "todo", "bar"]
+        )
+        results = Add.run(args, self.config)
+        results = list(results)
+        self.assertEqual(2, len(results))
+        self.assertTrue(results[0].exists())
+        self.assertTrue(results[1].exists())
+        self.assertEqual("life", results[0].name)
+        self.assertEqual("bar", results[1].name)
 
     def test_import(self):
         with NamedTemporaryFile(dir=self.notes_directory.name) as tmp_file:

@@ -370,11 +370,9 @@ ul.auto-toc {
 </pre>
 <p>Categorize those files using arbitrarily linked labels:</p>
 <pre class="literal-block">
-$ tag add todo
-todo
+$ tag add 2018-07-11_19-37-44.txt todo
 $ tag members
 todo
-$ tag add 2018-07-11_19-37-44.txt todo
 $ tag members todo
 2018-07-11_19-37-44.txt
 </pre>
@@ -394,9 +392,6 @@ pip3 install -U dist/tagnote-$VERSION.$FORMAT
 <div class="section" id="note-taking">
 <h1>Note-taking</h1>
 <pre class="literal-block">
-$ tag add meeting_minutes
-meeting_minutes
-$
 $ vim
 A meeting was held.
 :W meeting_minutes
@@ -439,9 +434,6 @@ A second meeting was held.
 <div class="section" id="todo-list">
 <h1>Todo List</h1>
 <pre class="literal-block">
-$ tag add todo
-todo
-$
 $ vim
 - buy groceries
 :W todo
@@ -485,9 +477,6 @@ $ tag show todo
 <div class="section" id="bookmarks">
 <h1>Bookmarks</h1>
 <pre class="literal-block">
-$ tag add bookmarks
-bookmarks
-$
 $ vim
 https://www.python.org/
 :W bookmarks

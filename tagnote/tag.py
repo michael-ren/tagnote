@@ -22,7 +22,7 @@ from argparse import ArgumentParser, Namespace
 from bisect import bisect_left
 from collections import OrderedDict
 from datetime import datetime
-from itertools import zip_longest
+from itertools import zip_longest, chain
 from json import load
 from os import environ, scandir, stat_result
 from pathlib import Path
@@ -568,7 +568,7 @@ class Command(metaclass=ABCMeta):
 class Add(Command):
     NAME = "add"
 
-    DESCRIPTION = "Add categories to a tag."
+    DESCRIPTION = "Create a tag and optionally add categories to it."
 
     @classmethod
     def name(cls) -> str:
@@ -589,19 +589,22 @@ class Add(Command):
     def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
         tag = tag_of(arguments.tag, config.notes_directory)
         to_add = OrderedDict()  # type: OrderedDict[Tag, Any]
-        for category_name in set(arguments.categories):
+        for category_name in OrderedDict.fromkeys(arguments.categories).keys():
             category = tag_of(category_name, config.notes_directory)
             if not isinstance(category, Label):
                 raise TagError(
                     "Categories must be labels: '{}'".format(category_name),
                     TagError.EXIT_UNSUPPORTED_OPERATION
                 )
-            category.check_exists()
             to_add.setdefault(category)
-        changed = tag.create()
+        new_tags = []
+        for new_tag in chain([tag], to_add.keys()):
+            changed = new_tag.create()
+            if changed:
+                new_tags.append(new_tag)
         for category in to_add.keys():
             category.add_member(tag)
-        return iter([tag] if changed else iter([]))
+        return iter(new_tags)
 
 
 class Members(Command):

@@ -8,11 +8,9 @@ Replace files like "asdflajsdf" in vim with timestamped .txt files::
 
 Categorize those files using arbitrarily linked labels::
 
-    $ tag add todo
-    todo
+    $ tag add 2018-07-11_19-37-44.txt todo
     $ tag members
     todo
-    $ tag add 2018-07-11_19-37-44.txt todo
     $ tag members todo
     2018-07-11_19-37-44.txt
 
@@ -34,9 +32,6 @@ Note-taking
 
 ::
 
-    $ tag add meeting_minutes
-    meeting_minutes
-    $
     $ vim
     A meeting was held.
     :W meeting_minutes
@@ -80,9 +75,6 @@ Todo List
 
 ::
 
-    $ tag add todo
-    todo
-    $
     $ vim
     - buy groceries
     :W todo
@@ -127,9 +119,6 @@ Bookmarks
 
 ::
 
-    $ tag add bookmarks
-    bookmarks
-    $
     $ vim
     https://www.python.org/
     :W bookmarks
