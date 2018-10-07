@@ -36,7 +36,7 @@ from typing import (
 )
 
 
-VERSION = "2.1.1"
+VERSION = "3.0.0"
 
 
 class Config:
