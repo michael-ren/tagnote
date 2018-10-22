@@ -7,7 +7,7 @@ with open("README.rst") as f:
 
 setup(
     name="tagnote",
-    version="3.0.0",
+    version="3.0.1",
     description="Minimalist note organization tool",
     long_description=readme,
     author="Michael Ren",
