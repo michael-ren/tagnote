@@ -975,7 +975,7 @@ class Push(Command):
             [
                 *config.rsync,
                 "-rtbv",
-                "--suffix={}.bak".format(format_timestamp(now)),
+                "--suffix=.{}.bak".format(format_timestamp(now)),
                 "{}/".format(config.notes_directory),
                 "{}/".format(arguments.dest_directory)
             ]
