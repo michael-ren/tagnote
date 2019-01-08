@@ -1172,6 +1172,10 @@ def run(args: Sequence[str]) -> None:
             if str(e):
                 print(e, file=stderr)
         exit(e.exit_status)
+    except KeyboardInterrupt:
+        exit(1)
+    except BrokenPipeError:
+        exit(0)
 
 
 def main():
