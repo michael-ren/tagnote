@@ -66,7 +66,7 @@ class Config:
         )
     )
 
-    def __init__(self, file: Optional[TextIO]=None) -> None:
+    def __init__(self, file: Optional[TextIO] = None) -> None:
         self.notes_directory = None  # type: Optional[Path]
         self.editor = None  # type: Optional[Sequence[str]]
         self.rsync = None  # type: Optional[Sequence[str]]
@@ -251,7 +251,7 @@ class Tag:
 class Note(Tag):
     TAG_TYPE = "note"
 
-    PATTERN = compile("^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}.txt$")
+    PATTERN = compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}.txt$")
 
     @classmethod
     def tag_type(cls) -> str:
@@ -299,7 +299,7 @@ class Note(Tag):
 class Label(Tag):
     TAG_TYPE = "label"
 
-    PATTERN = compile("^[\w-]+$")
+    PATTERN = compile(r"^[\w-]+$")
 
     @classmethod
     def tag_type(cls) -> str:
@@ -378,7 +378,7 @@ def tag_of(value: str, directory: Path) -> Tag:
     )
 
 
-def tag_types(tag_type: Optional[Type[Tag]]=None) -> Tuple[Type[Tag]]:
+def tag_types(tag_type: Optional[Type[Tag]] = None) -> Tuple[Type[Tag]]:
     if tag_type is not None:
         if tag_type not in TAG_TYPES:
             raise TypeError("Not a valid tag type: '{}'".format(tag_type))
@@ -389,7 +389,7 @@ def tag_types(tag_type: Optional[Type[Tag]]=None) -> Tuple[Type[Tag]]:
 
 
 def valid_tag_instance(
-        instance: Tag, tag_type: Optional[Type[Tag]]=None
+        instance: Tag, tag_type: Optional[Type[Tag]] = None
         ) -> bool:
     types = tag_types(tag_type)
     for type_ in types:
@@ -399,7 +399,7 @@ def valid_tag_instance(
 
 
 def valid_tag_name(
-        name: str, tag_type: Optional[Type[Tag]]=None
+        name: str, tag_type: Optional[Type[Tag]] = None
         ) -> bool:
     types = tag_types(tag_type)
     for type_ in types:
@@ -409,7 +409,7 @@ def valid_tag_name(
 
 
 def all_tags(
-        directory: Path, tag_type: Optional[Type[Tag]]=None
+        directory: Path, tag_type: Optional[Type[Tag]] = None
         ) -> Iterator[Tag]:
     try:
         directories = scandir(str(directory))
@@ -430,7 +430,7 @@ def all_tags(
 
 class AllTagsFrom(Iterator):
     def __init__(
-            self, category: Tag, tag_type: Optional[Type[Tag]]=None
+            self, category: Tag, tag_type: Optional[Type[Tag]] = None
             ) -> None:
         self.category = category
         self.tag_type = tag_type
