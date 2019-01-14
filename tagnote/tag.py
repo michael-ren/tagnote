@@ -150,6 +150,8 @@ class TagError(Exception):
 
     EXIT_BAD_ORDER = 33
 
+    EXIT_BAD_TAG_TYPE = 34
+
     def __init__(self, message: str, exit_status: int) -> None:
         super().__init__(message)
         self.exit_status = exit_status
@@ -158,8 +160,9 @@ class TagError(Exception):
 class Tag:
     def __init__(self, name: str, directory: Path) -> None:
         if not self.match(name):
-            raise ValueError(
-                "'{}' is not a valid {}".format(name, self.tag_type())
+            raise TagError(
+                "'{}' is not a valid {}".format(name, self.tag_type()),
+                TagError.EXIT_BAD_NAME
             )
         self.name = name
         self.directory = directory
@@ -370,8 +373,10 @@ def tag_of(value: str, directory: Path) -> Tag:
     for type_ in TAG_TYPES:
         try:
             return type_(value, directory)
-        except ValueError:
-            continue
+        except TagError as e:
+            if e.exit_status == TagError.EXIT_BAD_NAME:
+                continue
+            raise
     raise TagError(
         "No tag type for '{}'".format(value),
         TagError.EXIT_BAD_NAME
@@ -381,7 +386,10 @@ def tag_of(value: str, directory: Path) -> Tag:
 def tag_types(tag_type: Optional[Type[Tag]] = None) -> Tuple[Type[Tag]]:
     if tag_type is not None:
         if tag_type not in TAG_TYPES:
-            raise TypeError("Not a valid tag type: '{}'".format(tag_type))
+            raise TagError(
+                "Not a valid tag type: '{}'".format(tag_type),
+                TagError.EXIT_BAD_TAG_TYPE
+            )
         types = (tag_type,)
     else:
         types = TAG_TYPES
@@ -1023,7 +1031,7 @@ def argument_parser() -> ArgumentParser:
     )
     parser.add_argument(
         "-r", "--range",
-        help="A slice of notes to show"
+        help="A slice of results to show"
     )
     parser.add_argument(
         "-sc", "--single-column",
@@ -1066,26 +1074,35 @@ def compile_regex(pattern: str) -> Pattern:
     return regex
 
 
-def parse_slice(text: str) -> slice:
+def parse_range(text: str) -> slice:
     if not text.strip():
-        raise ValueError("Empty slice")
+        raise TagError("Empty range", TagError.EXIT_BAD_RANGE)
     components = text.split(":")
     if len(components) > 3 or len(components) < 1:
-        raise ValueError("Bad slice: '{}'".format(text))
+        raise TagError("Bad range: '{}'".format(text), TagError.EXIT_BAD_RANGE)
+
+    def try_int(value) -> int:
+        try:
+            return int(value)
+        except (ValueError, TypeError) as e:
+            raise TagError(
+                "Bad range: '{}'".format(text), TagError.EXIT_BAD_RANGE
+            ) from e
+
     if components[0]:
-        start = int(components[0])
+        start = try_int(components[0])
     else:
         start = 0
     if len(components) == 1:
         return slice(start, start + 1)
     if components[1]:
-        end = int(components[1])
+        end = try_int(components[1])
     else:
         end = -1
     if len(components) == 2:
         return slice(start, end)
     if components[2]:
-        step = int(components[2])
+        step = try_int(components[2])
     else:
         step = 1
     return slice(start, end, step)
@@ -1138,7 +1155,7 @@ def run_order_range(
         if order is not None:
             results_list.sort(reverse=not order)
         if args.range:
-            result_slice = parse_slice(args.range)
+            result_slice = parse_range(args.range)
             results_list = results_list[result_slice]
         results = iter(results_list)
     return results

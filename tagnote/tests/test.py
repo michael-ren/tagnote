@@ -30,7 +30,7 @@ from tagnote.tag import (
     Note, Label, tag_of, TagError, Config, all_tags, AllTagsFrom,
     all_unique_notes, left_pad, format_timestamp, MultipleColumn, SingleColumn,
     tag_types, valid_tag_instance, valid_tag_name,
-    argument_parser, Add, Import
+    argument_parser, Add, Import, parse_range
 )
 
 
@@ -92,13 +92,13 @@ class TestConfig(TestCase):
 
 class TestTag(TestCase):
     def test_tag_names(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TagError):
             Note("2018-05-05_01-01-01", Path())
         self.assertEqual(
             Note("2018-10-10_10-10-10.txt", Path()).name,
             "2018-10-10_10-10-10.txt"
         )
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TagError):
             Label("todo.txt", Path())
         self.assertEqual(
             Label("todo", Path()).name,
@@ -221,11 +221,11 @@ class TestTag(TestCase):
         with self.assertRaises(TagError):
             tag_of("todo.txt", Path())
 
-        with self.assertRaises(TypeError):
+        with self.assertRaises(TagError):
             tag_types(1)
-        with self.assertRaises(TypeError):
+        with self.assertRaises(TagError):
             valid_tag_name("foo", Path)
-        with self.assertRaises(TypeError):
+        with self.assertRaises(TagError):
             valid_tag_instance(Label("foo", Path()), Path)
         self.assertTrue(valid_tag_name("foo", Label))
         self.assertTrue(valid_tag_instance(Label("foo", Path())), Label)
@@ -515,7 +515,7 @@ class TestCommandNoUTC(TestCase):
         with NamedTemporaryFile(dir=self.notes_directory.name) as tmp_file:
             # 2018-10-06_16-17-30
             seconds = 1538857050
-            utime(tmp_file.name, times=(seconds,seconds))
+            utime(tmp_file.name, times=(seconds, seconds))
 
             args = self.parser.parse_args(["import", tmp_file.name])
             results = Import.run(args, self.config)
@@ -533,6 +533,37 @@ class TestCommandNoUTC(TestCase):
                 TagError.EXIT_NOTE_EXISTS,
                 e1.exception.exit_status
             )
+
+
+class TestPostProcessors(TestCase):
+    def test_parse_range(self):
+        with self.assertRaises(TagError) as e1:
+            parse_range("      ")
+        self.assertEqual(TagError.EXIT_BAD_RANGE, e1.exception.exit_status)
+
+        with self.assertRaises(TagError) as e2:
+            parse_range("::::")
+        self.assertEqual(TagError.EXIT_BAD_RANGE, e2.exception.exit_status)
+
+        with self.assertRaises(TagError) as e3:
+            parse_range("foo:bar")
+        self.assertEqual(TagError.EXIT_BAD_RANGE, e3.exception.exit_status)
+
+        r1 = parse_range("1")
+        self.assertIsInstance(r1, slice)
+        self.assertEqual(1, r1.start)
+        self.assertEqual(2, r1.stop)
+
+        r2 = parse_range("9:12")
+        self.assertIsInstance(r2, slice)
+        self.assertEqual(9, r2.start)
+        self.assertEqual(12, r2.stop)
+
+        r3 = parse_range("11:15:2")
+        self.assertIsInstance(r3, slice)
+        self.assertEqual(11, r3.start)
+        self.assertEqual(15, r3.stop)
+        self.assertEqual(2, r3.step)
 
 
 if __name__ == "__main__":
