@@ -119,10 +119,22 @@ class TestTag(TestCase):
         )
 
     def test_tag_operators(self):
-        # TODO
+        class Interloper:
+            name = "2018-10-10_10-10-10.txt"
+            directory = Path()
+
+        interloper = Interloper()
+
         self.assertEqual(
-            len({Label("todo", Path())}), 1
+            len(
+                {
+                    Label("todo", Path()),
+                    Label("todo", Path()),
+                    Label("tod", Path())
+                }
+            ), 2
         )
+
         self.assertEqual(
             Label("todo", Path()), Label("todo", Path())
         )
@@ -132,10 +144,32 @@ class TestTag(TestCase):
         self.assertNotEqual(
             Label("todo", Path()), Label("tod", Path())
         )
-        self.assertLess(Label("a", Path()), Label("b", Path()))
+        self.assertNotEqual(
+            Label("todo", Path()), "todo"
+        )
+        self.assertNotEqual(
+            Note("2018-10-10_10-10-10.txt", Path()),
+            interloper
+        )
+
+        self.assertLess(
+            Label("2018-10-10_10-10-10", Path()),
+            Note("2018-10-10_10-10-10.txt", Path())
+        )
+        with self.assertRaises(TypeError):
+            __ = Note("2018-10-10_09-10-10.txt", Path()) < interloper
+
         self.assertLessEqual(Label("a", Path()), Label("a", Path()))
+        with self.assertRaises(TypeError):
+            __ = Note("2018-10-10_10-10-10.txt", Path()) <= interloper
+
         self.assertGreater(Label("b", Path()), Label("a", Path()))
+        with self.assertRaises(TypeError):
+            __ = Note("2018-10-10_11-10-10.txt", Path()) > interloper
+
         self.assertGreaterEqual(Label("b", Path()), Label("b", Path()))
+        with self.assertRaises(TypeError):
+            __ = Note("2018-10-10_10-10-10.txt", Path()) >= interloper
 
     def test_create_and_search_text(self):
         with TemporaryDirectory() as tmp_dir:

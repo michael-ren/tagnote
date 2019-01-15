@@ -32,7 +32,8 @@ from subprocess import run as subprocess_run, CalledProcessError
 from sys import stdout, stderr, argv, exit
 from traceback import print_exc
 from typing import (
-    Sequence, Iterator, Iterable, Optional, Any, TextIO, Pattern, Type, Tuple
+    Sequence, Iterator, Iterable, Optional, Any, TextIO, Pattern, Type, Tuple,
+    Callable
 )
 
 
@@ -167,32 +168,50 @@ class Tag:
         self.name = name
         self.directory = directory
 
-    def __hash__(self):
-        return hash((self.name, self.directory))
-
-    def __eq__(self, other):
-        return self.name == other.name and self.directory == other.directory
-
-    def __ne__(self, other):
-        return self.name != other.name or self.directory != other.directory
-
     def __str__(self):
         return str(Path(self.directory, self.name))
 
     def __repr__(self):
         return "{}('{}')".format(type(self).__name__, self.__str__())
 
+    def __hash__(self):
+        return hash((self.name, self.directory))
+
+    def __eq__(self, other):
+        return isinstance(other, Tag) \
+            and self.name == other.name \
+            and self.directory == other.directory
+
+    def _compare(self, other, operation: Callable[[Any, Any], bool]) -> bool:
+        if not isinstance(other, Tag):
+            raise TypeError(
+                "Cannot compare '{}' with '{}'".format(self, other)
+            )
+        return operation(self.name, other.name)
+
     def __lt__(self, other):
-        return self.name < other.name
+        def operation(x, y) -> bool:
+            return x < y
+
+        return self._compare(other, operation)
 
     def __le__(self, other):
-        return self.name <= other.name
+        def operation(x, y) -> bool:
+            return x <= y
+
+        return self._compare(other, operation)
 
     def __gt__(self, other):
-        return self.name > other.name
+        def operation(x, y) -> bool:
+            return x > y
+
+        return self._compare(other, operation)
 
     def __ge__(self, other):
-        return self.name >= other.name
+        def operation(x, y) -> bool:
+            return x >= y
+
+        return self._compare(other, operation)
 
     @classmethod
     def match(cls, name: str) -> bool:
