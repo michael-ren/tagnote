@@ -777,6 +777,9 @@ class Add(Command):
 
     @classmethod
     def arguments(cls, parser: ArgumentParser) -> None:
+        parser.add_argument(
+            "-p", "--prototype", help="Another tag to copy categories from"
+        )
         parser.add_argument("tag", help="The tag to add")
         parser.add_argument(
             "categories", nargs="*", help="The categories to add to the tag"
@@ -786,6 +789,10 @@ class Add(Command):
     def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
         tag = tag_of(arguments.tag, config.notes_directory)
         to_add = OrderedDict()  # type: OrderedDict[Tag, Any]
+        if arguments.prototype:
+            prototype = tag_of(arguments.prototype, config.notes_directory)
+            for category in prototype.categories():
+                to_add.setdefault(category)
         for category_name in OrderedDict.fromkeys(arguments.categories).keys():
             category = tag_of(category_name, config.notes_directory)
             if not isinstance(category, Label):

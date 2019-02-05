@@ -721,46 +721,65 @@ class TestCommandNoUTC(TestCase):
             e1.exception.exit_status
         )
 
-        note_path = Path(self.notes_directory.name, note_name)
+        note_path = Path(self.config.notes_directory, note_name)
         with open(str(note_path), "w") as f:
             f.write("")
 
         args = self.parser.parse_args(["add", "base"])
         results = Add.run(args, self.config)
         results = list(results)
-        self.assertEqual(1, len(results))
+        self.assertEqual(
+            [Label("base", self.config.notes_directory)], results
+        )
         self.assertTrue(results[0].exists())
-        self.assertEqual("base", results[0].name)
 
         args = self.parser.parse_args(["add", note_name, "base"])
         results = Add.run(args, self.config)
         results = list(results)
         self.assertEqual(0, len(results))
 
+        args = self.parser.parse_args(["add", "-p", note_name, "note_replica"])
+        results = Add.run(args, self.config)
+        results = list(results)
+        self.assertEqual(
+            [Label("note_replica", self.config.notes_directory)], results
+        )
+        self.assertTrue(results[0].exists())
+        self.assertEqual(
+            [Label("base", self.config.notes_directory)],
+            list(results[0].categories())
+        )
+
         args = self.parser.parse_args(["add", "base", "todo"])
         results = Add.run(args, self.config)
         results = list(results)
-        self.assertEqual(1, len(results))
+        self.assertEqual(
+            [Label("todo", self.config.notes_directory)], results
+        )
         self.assertTrue(results[0].exists())
-        self.assertEqual("todo", results[0].name)
 
         args = self.parser.parse_args(["add", "foo", "base"])
         results = Add.run(args, self.config)
         results = list(results)
-        self.assertEqual(1, len(results))
+        self.assertEqual(
+            [Label("foo", self.config.notes_directory)], results
+        )
         self.assertTrue(results[0].exists())
-        self.assertEqual("foo", results[0].name)
 
         args = self.parser.parse_args(
             ["add", "base", "life", "todo", "todo", "todo", "bar"]
         )
         results = Add.run(args, self.config)
         results = list(results)
-        self.assertEqual(2, len(results))
+        self.assertEqual(
+            [
+                Label("life", self.config.notes_directory),
+                Label("bar", self.config.notes_directory)
+            ],
+            results
+        )
         self.assertTrue(results[0].exists())
         self.assertTrue(results[1].exists())
-        self.assertEqual("life", results[0].name)
-        self.assertEqual("bar", results[1].name)
 
     def test_import(self):
         with NamedTemporaryFile(dir=self.notes_directory.name) as tmp_file:
