@@ -14,7 +14,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-
+from argparse import Namespace
 from unittest import TestCase, main
 from unittest.mock import patch
 from io import StringIO
@@ -31,7 +31,8 @@ from tagnote.tag import (
     Note, Label, tag_of, TagError, Config, all_tags, AllTagsFrom,
     all_unique_notes, left_pad, format_timestamp, MultipleColumn, SingleColumn,
     tag_types, valid_tag_instance, valid_tag_name,
-    argument_parser, Add, Import, parse_range, parse_order, run_order_range
+    argument_parser, Add, Import, parse_range, parse_order, run_order_range,
+    split_timestamp, parse_timestamp, DatePattern, DateRange, run_filters
 )
 
 
@@ -277,6 +278,14 @@ class TestTag(TestCase):
                 TagError.EXIT_LABEL_NOT_EXISTS, e4.exception.exit_status
             )
 
+    def test_note_convert_timestamp(self):
+        timestamp = datetime(2018, 11, 11, 10, 10, 10)
+        from_timestamp = Note.from_timestamp(timestamp, Path("/tmp/foobar"))
+        self.assertEqual("2018-11-11_10-10-10.txt", from_timestamp.name)
+        self.assertEqual(Path("/tmp/foobar"), from_timestamp.directory)
+        to_timestamp = from_timestamp.to_timestamp()
+        self.assertEqual(timestamp, to_timestamp)
+
     # noinspection PyTypeChecker
     def test_static_tag_helpers(self):
         self.assertEqual(
@@ -474,6 +483,80 @@ class TestFormat(TestCase):
         )
         self.assertEqual(format_timestamp(t1), "2018-10-09_08-07-06")
 
+    def test_split_timestamp(self):
+        with self.assertRaises(TagError) as e:
+            split_timestamp("")
+        self.assertEqual(TagError.EXIT_BAD_TIMESTAMP, e.exception.exit_status)
+
+        with self.assertRaises(TagError) as e:
+            split_timestamp("--")
+        self.assertEqual(TagError.EXIT_BAD_TIMESTAMP, e.exception.exit_status)
+
+        with self.assertRaises(TagError) as e:
+            split_timestamp("__")
+        self.assertEqual(TagError.EXIT_BAD_TIMESTAMP, e.exception.exit_status)
+
+        with self.assertRaises(TagError) as e:
+            split_timestamp("a-b-c_d-e-f-g")
+        self.assertEqual(TagError.EXIT_BAD_TIMESTAMP, e.exception.exit_status)
+
+        full = split_timestamp("2018-09-10_a-b-c")
+        self.assertEqual(
+            ["2018", "09", "10", "a", "b", "c"], full
+        )
+
+        minimal = split_timestamp("2018")
+        self.assertEqual(
+            ["2018"], minimal
+        )
+
+        partial_with_pattern = split_timestamp("2018-*-*_10")
+        self.assertEqual(
+            ["2018", "*", "*", "10"], partial_with_pattern
+        )
+
+        partial_no_numbers = split_timestamp("brown-fox")
+        self.assertEqual(
+            ["brown", "fox"], partial_no_numbers
+        )
+
+        longer_partial_no_numbers = split_timestamp("some-one-likes_this")
+        self.assertEqual(
+            ["some", "one", "likes", "this"],
+            longer_partial_no_numbers
+        )
+
+        with self.assertRaises(TagError) as e:
+            split_timestamp("a_good_show")
+        self.assertEqual(TagError.EXIT_BAD_TIMESTAMP, e.exception.exit_status)
+
+        with self.assertRaises(TagError) as e:
+            split_timestamp("so-I_think")
+        self.assertEqual(TagError.EXIT_BAD_TIMESTAMP, e.exception.exit_status)
+
+        with self.assertRaises(TagError) as e:
+            split_timestamp("so_you-think-you")
+        self.assertEqual(TagError.EXIT_BAD_TIMESTAMP, e.exception.exit_status)
+
+    def test_parse_timestamp(self):
+        full = parse_timestamp("2018-05-06_07-08-09")
+        self.assertEqual(
+            datetime(2018, 5, 6, 7, 8, 9), full
+        )
+
+        partial = parse_timestamp("2018-5-1")
+        self.assertEqual(
+            datetime(2018, 5, 1), partial
+        )
+
+        with self.assertRaises(TagError) as e1:
+            parse_timestamp("2018-01-02_10-09-a")
+        self.assertEqual(TagError.EXIT_BAD_TIMESTAMP, e1.exception.exit_status)
+
+        with self.assertRaises(TagError) as e2:
+            parse_timestamp("2018-05")
+        self.assertEqual(TagError.EXIT_BAD_TIMESTAMP, e2.exception.exit_status)
+
     def test_multicolumn_common(self):
         def get_terminal_size():
             return terminal_size([10, 10])
@@ -510,6 +593,101 @@ class TestFormat(TestCase):
                 stdout.getvalue(),
                 "single\ncolumn\nformat\n"
             )
+
+
+class TestDatePatternRange(TestCase):
+    def test_date_pattern(self):
+        with self.assertRaises(TagError) as e:
+            DatePattern(2018, 10, 10, 10, 10, 10, 10)
+        self.assertEqual(
+            TagError.EXIT_BAD_DATE_PATTERN, e.exception.exit_status
+        )
+
+        empty = DatePattern()
+        self.assertEqual(None, empty.pattern.year)
+        self.assertEqual(None, empty.pattern.second)
+
+        simple = DatePattern(2018)
+        self.assertEqual(2018, simple.pattern.year)
+        self.assertEqual(None, simple.pattern.month)
+        self.assertEqual(None, simple.pattern.second)
+
+        full = DatePattern(2018, 10, 11, 5, 6, 7)
+        self.assertEqual(2018, full.pattern.year)
+        self.assertEqual(10, full.pattern.month)
+        self.assertEqual(11, full.pattern.day)
+        self.assertEqual(5, full.pattern.hour)
+        self.assertEqual(6, full.pattern.minute)
+        self.assertEqual(7, full.pattern.second)
+
+        with self.assertRaises(TagError) as e:
+            DatePattern.from_string("2018-09-10_05-06-x")
+        self.assertEqual(
+            TagError.EXIT_BAD_DATE_PATTERN, e.exception.exit_status
+        )
+
+        self.assertEqual(
+            DatePattern(2018, None, 9, None, None, None),
+            DatePattern.from_string("2018-*-9")
+        )
+
+        pattern = DatePattern.from_string("2018-*-10_09-10")
+        self.assertEqual(
+            DatePattern(2018, None, 10, 9, 10, None),
+            pattern
+        )
+
+        self.assertLess(pattern, DatePattern(2019, None, None, 8, None, None))
+
+        self.assertLessEqual(pattern, DatePattern(2018, 9, 10, 11))
+
+        self.assertGreaterEqual(pattern, DatePattern())
+
+        self.assertLess(pattern, DatePattern())
+
+        self.assertGreater(pattern, DatePattern(None, None, None, None, 9))
+
+        self.assertLessEqual(pattern, datetime(2018, 10, 11))
+
+        self.assertGreaterEqual(pattern, datetime(2018, 10, 10, 9, 9))
+
+        d1 = datetime(2018, 10, 10, 9, 10, 11)
+        self.assertLess(pattern, d1)
+        self.assertGreater(pattern, d1)
+
+        with self.assertRaises(TypeError):
+            __ = pattern < 1
+
+        with self.assertRaises(TypeError):
+            __ = pattern >= "pie"
+
+    def test_date_range(self):
+        with self.assertRaises(TagError) as e1:
+            DateRange.from_string("1:2:3")
+        self.assertEqual(
+            TagError.EXIT_BAD_DATE_RANGE, e1.exception.exit_status
+        )
+
+        single = DateRange.from_string("2018")
+        single_expected = DatePattern(2018)
+        self.assertEqual(single_expected, single.start)
+        self.assertEqual(single_expected, single.end)
+        self.assertTrue(single.match(datetime(2018, 10, 11)))
+        self.assertFalse(single.match(datetime(2019, 1, 1)))
+        self.assertTrue(single.match(DatePattern(2018)))
+        self.assertTrue(single.match(DatePattern(2018, 11)))
+        self.assertFalse(single.match(DatePattern(2019, 2, 2)))
+
+        double = DateRange.from_string("2018:*-*-*_11")
+        self.assertEqual(DatePattern(2018), double.start)
+        self.assertEqual(DatePattern(None, None, None, 11), double.end)
+        self.assertTrue(double.match(datetime(2019, 1, 1)))
+        self.assertFalse(double.match(datetime(2017, 1, 1)))
+        self.assertFalse(double.match(datetime(2019, 1, 1, 12)))
+        self.assertTrue(double.match(DatePattern(2018, None, None, 10)))
+        self.assertTrue(double.match(DatePattern(2018, None, None, None, 12)))
+        self.assertFalse(double.match(DatePattern(None, None, None, 13)))
+        self.assertTrue(double.match(DatePattern(None, None, None, None, 13)))
 
 
 class TestCommandNoUTC(TestCase):
@@ -639,6 +817,50 @@ class TestPostProcessors(TestCase):
         self.assertEqual(15, r3.stop)
         self.assertEqual(2, r3.step)
 
+    def test_filters(self):
+        with TemporaryDirectory() as tmp_dir:
+            tmp_dir = Path(tmp_dir)
+            tags = []
+            note = Note("2018-10-11_15-16-17.txt", tmp_dir)
+            with note.path().open("w") as f:
+                f.writelines(["The text to match", "is here", "on this line"])
+            note.create()
+            label1 = Label("test", tmp_dir)
+            label1.create()
+            label2 = Label("another", tmp_dir)
+            label2.create()
+            tags.append(label1)
+            tags.append(label2)
+            tags.append(note)
+
+            null_result = list(
+                run_filters(
+                    tags, Namespace(time=None, name=None, search=None)
+                )
+            )
+            self.assertEqual(tags, null_result)
+
+            search_result = list(
+                run_filters(
+                    tags, Namespace(time=None, name=None, search="this line")
+                )
+            )
+            self.assertEqual([note], search_result)
+
+            name_result = list(
+                run_filters(
+                    tags, Namespace(time=None, name=".*not.*", search=None)
+                )
+            )
+            self.assertEqual([label2], name_result)
+
+            date_range_result = list(
+                run_filters(
+                    tags, Namespace(time="*-10:*-*-11", name=None, search=None)
+                )
+            )
+            self.assertEqual([note], date_range_result)
+
     def test_parse_order(self):
         self.assertEqual(True, parse_order("a"))
         self.assertEqual(False, parse_order("d"))
@@ -686,7 +908,9 @@ class TestPostProcessors(TestCase):
             self.assertEqual([second, first, third], descending_result)
 
             range_result = list(
-                run_order_range(tags, Namespace(order="none", range="1:2"))
+                run_order_range(
+                    tags, Namespace(order="none", range="1:2")
+                )
             )
             self.assertEqual([second], range_result)
 

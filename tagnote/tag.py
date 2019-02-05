@@ -20,7 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 from abc import ABCMeta, abstractmethod
 from argparse import ArgumentParser, Namespace
 from bisect import bisect_left
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from datetime import datetime
 from itertools import zip_longest, chain
 from json import load
@@ -33,7 +33,7 @@ from sys import stdout, stderr, argv, exit
 from traceback import print_exc
 from typing import (
     Sequence, Iterator, Iterable, Optional, Any, TextIO, Pattern, Type, Tuple,
-    Callable
+    NamedTuple, Callable, Union
 )
 
 
@@ -152,6 +152,12 @@ class TagError(Exception):
     EXIT_BAD_ORDER = 33
 
     EXIT_BAD_TAG_TYPE = 34
+
+    EXIT_BAD_TIMESTAMP = 35
+
+    EXIT_BAD_DATE_PATTERN = 36
+
+    EXIT_BAD_DATE_RANGE = 37
 
     def __init__(self, message: str, exit_status: int) -> None:
         super().__init__(message)
@@ -316,6 +322,14 @@ class Note(Tag):
                 if pattern.search(line):
                     return True
         return False
+
+    @classmethod
+    def from_timestamp(cls, timestamp: datetime, directory: Path) -> "Note":
+        name = "{}.txt".format(format_timestamp(timestamp))
+        return cls(name, directory)
+
+    def to_timestamp(self) -> datetime:
+        return parse_timestamp(Path(self.name).stem)
 
 
 class Label(Tag):
@@ -513,6 +527,48 @@ def format_timestamp(timestamp: datetime) -> str:
     return name
 
 
+def split_timestamp(timestamp: str) -> Sequence[str]:
+    delimiters = ["-", "-", "_", "-", "-"]
+    split = deque([timestamp])  # type: deque
+
+    def raise_error() -> TagError:
+        raise TagError(
+            "Bad timestamp: {}".format(timestamp),
+            TagError.EXIT_BAD_TIMESTAMP
+        )
+
+    for delimiter in delimiters:
+        rest = split.pop()
+        rest_split = rest.split(delimiter, 1)
+        if not rest_split[0]:
+            raise_error()
+        for outlier in set(delimiters).difference({delimiter}):
+            if outlier in rest_split[0]:
+                raise_error()
+        if len(rest_split) == 2:
+            split.extend([rest_split[0], rest_split[1]])
+        elif len(rest_split) == 1:
+            split.append(rest_split[0])
+            break
+        else:
+            raise_error()
+    for delimiter in set(delimiters):
+        if delimiter in split[-1]:
+            raise_error()
+    return list(split)
+
+
+def parse_timestamp(timestamp: str) -> datetime:
+    split = split_timestamp(timestamp)
+    try:
+        return datetime(*[int(i) for i in split])
+    except (ValueError, TypeError) as e:
+        raise TagError(
+            "Bad timestamp: {}".format(timestamp),
+            TagError.EXIT_BAD_TIMESTAMP
+        ) from e
+
+
 class Formatter(metaclass=ABCMeta):
     PADDING = 20
 
@@ -554,6 +610,120 @@ class SingleColumn(Formatter):
     def format(cls, items: Iterable[str]) -> None:
         for item in items:
             print(item, file=stdout)
+
+
+class DatePattern:
+    WILDCARD = "*"
+
+    Pattern = NamedTuple(
+        "Pattern",
+        [
+            ("year", Optional[int]),
+            ("month", Optional[int]),
+            ("day", Optional[int]),
+            ("hour", Optional[int]),
+            ("minute", Optional[int]),
+            ("second", Optional[int])
+        ]
+    )
+
+    def __init__(self, *elements: Optional[int]) -> None:
+        if len(elements) > 6:
+            raise TagError(
+                "Too many elements in date pattern: {}".format(elements),
+                TagError.EXIT_BAD_DATE_PATTERN
+            )
+        padding = 6 - len(elements)
+        padded_elements = list(elements) + [None] * padding
+        self.pattern = self.Pattern(*padded_elements)
+
+    @classmethod
+    def parse_element(cls, element: str) -> Optional[int]:
+        if element == cls.WILDCARD:
+            return None
+        try:
+            return int(element)
+        except ValueError as e:
+            raise TagError(
+                "Bad date pattern element: {}".format(element),
+                TagError.EXIT_BAD_DATE_PATTERN
+            ) from e
+
+    @classmethod
+    def from_string(cls, pattern: str) -> "DatePattern":
+        return cls(
+            *[cls.parse_element(i) for i in split_timestamp(pattern)]
+        )
+
+    def __hash__(self):
+        return hash(self.pattern)
+
+    def __eq__(self, other):
+        return isinstance(other, DatePattern) and self.pattern == other.pattern
+
+    def _compare(self, other, operation: Callable[[Any, Any], bool]) -> bool:
+        if isinstance(other, DatePattern):
+            def accessor(f):
+                return getattr(other.pattern, f)
+        elif isinstance(other, datetime):
+            def accessor(f):
+                return getattr(other, f)
+        else:
+            raise TypeError("Cannot compare {} with {}".format(self, other))
+
+        for field in self.pattern._fields:
+            self_item = getattr(self.pattern, field)
+            other_item = accessor(field)
+            if self_item is None \
+                    or other_item is None \
+                    or self_item == other_item:
+                continue
+            return operation(self_item, other_item)
+        return True
+
+    def __lt__(self, other):
+        def operation(x, y) -> bool:
+            return x < y
+        return self._compare(other, operation)
+
+    def __le__(self, other):
+        def operation(x, y) -> bool:
+            return x <= y
+        return self._compare(other, operation)
+
+    def __gt__(self, other):
+        def operation(x, y) -> bool:
+            return x > y
+        return self._compare(other, operation)
+
+    def __ge__(self, other):
+        def operation(x, y) -> bool:
+            return x >= y
+        return self._compare(other, operation)
+
+
+class DateRange:
+    def __init__(self, start: DatePattern, end: DatePattern) -> None:
+        self.start = start
+        self.end = end
+
+    @classmethod
+    def from_string(cls, range_: str) -> "DateRange":
+        elements = range_.split(":")
+        if len(elements) == 1:
+            elements.append(elements[0])
+        if len(elements) != 2:
+            raise TagError(
+                "Bad date range: {}".format(range_),
+                TagError.EXIT_BAD_DATE_RANGE
+            )
+        start, end = (
+            DatePattern.from_string(element) for element in elements
+        )
+        return cls(start, end)
+
+    def match(self, other: Union[DatePattern, datetime]) -> bool:
+        return self.start <= other <= self.end
 
 
 class Command(metaclass=ABCMeta):
@@ -901,10 +1071,6 @@ class Import(Command):
         return stat
 
     @classmethod
-    def filename(cls, timestamp: datetime) -> str:
-        return "{}.txt".format(format_timestamp(timestamp))
-
-    @classmethod
     def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
         destinations = []
         for path in arguments.files:
@@ -913,7 +1079,7 @@ class Import(Command):
                 timestamp = datetime.utcfromtimestamp(stat.st_mtime)
             else:
                 timestamp = datetime.fromtimestamp(stat.st_mtime)
-            note = tag_of(cls.filename(timestamp), config.notes_directory)
+            note = Note.from_timestamp(timestamp, config.notes_directory)
             if note.exists():
                 raise TagError(
                     "Note already exists: '{}'".format(note),
@@ -1037,7 +1203,11 @@ def argument_parser() -> ArgumentParser:
         action="store_true"
     )
     parser.add_argument(
-        "-t", "--tag-name",
+        "-t", "--time",
+        help="A date range, inclusive, to filter on, e.g. *-12 or 2018:2019"
+    )
+    parser.add_argument(
+        "-n", "--name",
         help="A regex for tag names to filter on"
     )
     parser.add_argument(
@@ -1050,7 +1220,7 @@ def argument_parser() -> ArgumentParser:
     )
     parser.add_argument(
         "-r", "--range",
-        help="A slice of results to show"
+        help="A range of results to show, as a slice"
     )
     parser.add_argument(
         "-sc", "--single-column",
@@ -1128,24 +1298,41 @@ def parse_range(text: str) -> slice:
 
 
 def run_filters(results: Iterable[Tag], args: Namespace) -> Iterator[Tag]:
+    filters = []
+
+    if args.time:
+        time_pattern = DateRange.from_string(args.time)
+
+        def time(t: Tag) -> bool:
+            if isinstance(t, Note):
+                return time_pattern.match(t.to_timestamp())
+            return False
+
+        filters.append(time)
+
+    if args.name:
+        name_pattern = compile_regex(args.name)
+
+        def name(t: Tag) -> bool:
+            return bool(name_pattern.search(t.name))
+
+        filters.append(name)
+
     if args.search:
         search_pattern = compile_regex(args.search)
 
         def search(t: Tag) -> bool:
             return t.search_text(search_pattern)
-    else:
-        def search(__) -> bool:
-            return True
-    if args.tag_name:
-        tag_name_pattern = compile_regex(args.tag_name)
 
-        def tag_name(t: Tag) -> bool:
-            return bool(tag_name_pattern.search(t.name))
-    else:
-        def tag_name(__) -> bool:
-            return True
+        filters.append(search)
 
-    results = (t for t in results if search(t) and tag_name(t))
+    def all_filters(t: Tag) -> bool:
+        for filter_ in filters:
+            if not filter_(t):
+                return False
+        return True
+
+    results = (t for t in results if all_filters(t))
     return results
 
 
