@@ -25,12 +25,13 @@ from re import compile as re_compile
 from typing import Sequence, TextIO
 from os import terminal_size, utime
 from json import dumps
+from argparse import Namespace
 
 from tagnote.tag import (
     Note, Label, tag_of, TagError, Config, all_tags, AllTagsFrom,
     all_unique_notes, left_pad, format_timestamp, MultipleColumn, SingleColumn,
     tag_types, valid_tag_instance, valid_tag_name,
-    argument_parser, Add, Import, parse_range
+    argument_parser, Add, Import, parse_range, parse_order, run_order_range
 )
 
 
@@ -637,6 +638,57 @@ class TestPostProcessors(TestCase):
         self.assertEqual(11, r3.start)
         self.assertEqual(15, r3.stop)
         self.assertEqual(2, r3.step)
+
+    def test_parse_order(self):
+        self.assertEqual(True, parse_order("a"))
+        self.assertEqual(False, parse_order("d"))
+        self.assertEqual(None, parse_order("n"))
+        with self.assertRaises(TagError) as e1:
+            parse_order("")
+        self.assertEqual(TagError.EXIT_BAD_ORDER, e1.exception.exit_status)
+
+        with self.assertRaises(TagError) as e2:
+            parse_order("zzz")
+        self.assertEqual(TagError.EXIT_BAD_ORDER, e2.exception.exit_status)
+
+    def test_run_order_range(self):
+        with TemporaryDirectory() as tmp_dir:
+            tmp_dir = Path(tmp_dir)
+            tags = []
+            # 2018-01-01_05-06-07.txt, something, 2017-05-05_05-05-05.txt
+            first = Note("2018-01-01_05-06-07.txt", tmp_dir)
+            with first.path().open("w") as f:
+                f.write("")
+            first.create()
+            second = Label("something", tmp_dir)
+            second.create()
+            third = Note("2017-05-05_05-05-05.txt", tmp_dir)
+            with third.path().open("w") as f:
+                f.write("")
+            third.create()
+            tags.append(first)
+            tags.append(second)
+            tags.append(third)
+
+            null_result = list(
+                run_order_range(tags, Namespace(order=None, range=None))
+            )
+            self.assertEqual(tags, null_result)
+
+            ascending_result = list(
+                run_order_range(tags, Namespace(order="asc", range=None), None)
+            )
+            self.assertEqual([third, first, second], ascending_result)
+
+            descending_result = list(
+                run_order_range(tags, Namespace(order="desc", range=None), None)
+            )
+            self.assertEqual([second, first, third], descending_result)
+
+            range_result = list(
+                run_order_range(tags, Namespace(order="none", range="1:2"))
+            )
+            self.assertEqual([second], range_result)
 
 
 if __name__ == "__main__":

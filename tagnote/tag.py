@@ -1164,9 +1164,11 @@ def parse_order(value: str) -> Optional[bool]:
 
 
 def run_order_range(
-        results: Iterable[Tag], args: Namespace, command: Command
+        results: Iterable[Tag],
+        args: Namespace,
+        default_sort_order: Optional[bool] = None
         ) -> Iterator[Tag]:
-    order = command.default_sort_order()
+    order = default_sort_order
     if args.order:
         order = parse_order(args.order)
     if order is not None or args.range:
@@ -1174,8 +1176,8 @@ def run_order_range(
         if order is not None:
             results_list.sort(reverse=not order)
         if args.range:
-            result_slice = parse_range(args.range)
-            results_list = results_list[result_slice]
+            result_range = parse_range(args.range)
+            results_list = results_list[result_range]
         results = iter(results_list)
     return results
 
@@ -1195,7 +1197,7 @@ def run(args: Sequence[str]) -> None:
         config = read_config_file(Path(args.config))
         results = command.run(args, config)  # type: Iterator[Tag]
         results = run_filters(results, args)
-        results = run_order_range(results, args, command)
+        results = run_order_range(results, args, command.default_sort_order())
         if args.single_column:
             formatter = SingleColumn
         else:
