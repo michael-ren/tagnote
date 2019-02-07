@@ -1257,15 +1257,6 @@ def argument_parser() -> ArgumentParser:
     return parser
 
 
-def read_config_file(path: Path) -> Config:
-    try:
-        with path.open() as file:
-            config = Config(file)
-    except FileNotFoundError:
-        config = Config()
-    return config
-
-
 def compile_regex(pattern: str) -> Pattern:
     try:
         regex = compile(pattern)
@@ -1274,40 +1265,6 @@ def compile_regex(pattern: str) -> Pattern:
             "Bad regex: '{}'".format(pattern), TagError.EXIT_BAD_REGEX
         ) from e
     return regex
-
-
-def parse_range(text: str) -> slice:
-    if not text.strip():
-        raise TagError("Empty range", TagError.EXIT_BAD_RANGE)
-    components = text.split(":")
-    if len(components) > 3 or len(components) < 1:
-        raise TagError("Bad range: '{}'".format(text), TagError.EXIT_BAD_RANGE)
-
-    def try_int(value) -> int:
-        try:
-            return int(value)
-        except (ValueError, TypeError) as e:
-            raise TagError(
-                "Bad range: '{}'".format(text), TagError.EXIT_BAD_RANGE
-            ) from e
-
-    if components[0]:
-        start = try_int(components[0])
-    else:
-        start = 0
-    if len(components) == 1:
-        return slice(start, start + 1)
-    if components[1]:
-        end = try_int(components[1])
-    else:
-        end = -1
-    if len(components) == 2:
-        return slice(start, end)
-    if components[2]:
-        step = try_int(components[2])
-    else:
-        step = 1
-    return slice(start, end, step)
 
 
 def run_filters(results: Iterable[Tag], args: Namespace) -> Iterator[Tag]:
@@ -1363,6 +1320,40 @@ def parse_order(value: str) -> Optional[bool]:
     )
 
 
+def parse_range(text: str) -> slice:
+    if not text.strip():
+        raise TagError("Empty range", TagError.EXIT_BAD_RANGE)
+    components = text.split(":")
+    if len(components) > 3 or len(components) < 1:
+        raise TagError("Bad range: '{}'".format(text), TagError.EXIT_BAD_RANGE)
+
+    def try_int(value) -> int:
+        try:
+            return int(value)
+        except (ValueError, TypeError) as e:
+            raise TagError(
+                "Bad range: '{}'".format(text), TagError.EXIT_BAD_RANGE
+            ) from e
+
+    if components[0]:
+        start = try_int(components[0])
+    else:
+        start = 0
+    if len(components) == 1:
+        return slice(start, start + 1)
+    if components[1]:
+        end = try_int(components[1])
+    else:
+        end = -1
+    if len(components) == 2:
+        return slice(start, end)
+    if components[2]:
+        step = try_int(components[2])
+    else:
+        step = 1
+    return slice(start, end, step)
+
+
 def run_order_range(
         results: Iterable[Tag],
         args: Namespace,
@@ -1380,6 +1371,15 @@ def run_order_range(
             results_list = results_list[result_range]
         results = iter(results_list)
     return results
+
+
+def read_config_file(path: Path) -> Config:
+    try:
+        with path.open() as file:
+            config = Config(file)
+    except FileNotFoundError:
+        config = Config()
+    return config
 
 
 def run(args: Sequence[str]) -> None:

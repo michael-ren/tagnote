@@ -853,55 +853,6 @@ class TestCommandNoUTC(TestCase):
 
 
 class TestPostProcessors(TestCase):
-    def test_parse_range(self):
-        with self.assertRaises(TagError) as e:
-            parse_range("      ")
-        self.assertEqual(TagError.EXIT_BAD_RANGE, e.exception.exit_status)
-
-        with self.assertRaises(TagError) as e:
-            parse_range("::::")
-        self.assertEqual(TagError.EXIT_BAD_RANGE, e.exception.exit_status)
-
-        with self.assertRaises(TagError) as e:
-            parse_range("foo:bar")
-        self.assertEqual(TagError.EXIT_BAD_RANGE, e.exception.exit_status)
-
-        r1 = parse_range("1")
-        self.assertIsInstance(r1, slice)
-        self.assertEqual(1, r1.start)
-        self.assertEqual(2, r1.stop)
-        self.assertEqual(None, r1.step)
-
-        r2 = parse_range("9:12")
-        self.assertIsInstance(r2, slice)
-        self.assertEqual(9, r2.start)
-        self.assertEqual(12, r2.stop)
-        self.assertEqual(None, r2.step)
-
-        r3 = parse_range("11:15:2")
-        self.assertIsInstance(r3, slice)
-        self.assertEqual(11, r3.start)
-        self.assertEqual(15, r3.stop)
-        self.assertEqual(2, r3.step)
-
-        r4 = parse_range(":2")
-        self.assertIsInstance(r4, slice)
-        self.assertEqual(0, r4.start)
-        self.assertEqual(2, r4.stop)
-        self.assertEqual(None, r4.step)
-
-        r5 = parse_range("5:")
-        self.assertIsInstance(r5, slice)
-        self.assertEqual(5, r5.start)
-        self.assertEqual(-1, r5.stop)
-        self.assertEqual(None, r5.step)
-
-        r6 = parse_range("1:2:")
-        self.assertIsInstance(r6, slice)
-        self.assertEqual(1, r6.start)
-        self.assertEqual(2, r6.stop)
-        self.assertEqual(1, r6.step)
-
     def test_filters(self):
         with TemporaryDirectory() as tmp_dir:
             tmp_dir = Path(tmp_dir)
@@ -957,6 +908,55 @@ class TestPostProcessors(TestCase):
         with self.assertRaises(TagError) as e:
             parse_order("zzz")
         self.assertEqual(TagError.EXIT_BAD_ORDER, e.exception.exit_status)
+
+    def test_parse_range(self):
+        with self.assertRaises(TagError) as e:
+            parse_range("      ")
+        self.assertEqual(TagError.EXIT_BAD_RANGE, e.exception.exit_status)
+
+        with self.assertRaises(TagError) as e:
+            parse_range("::::")
+        self.assertEqual(TagError.EXIT_BAD_RANGE, e.exception.exit_status)
+
+        with self.assertRaises(TagError) as e:
+            parse_range("foo:bar")
+        self.assertEqual(TagError.EXIT_BAD_RANGE, e.exception.exit_status)
+
+        r1 = parse_range("1")
+        self.assertIsInstance(r1, slice)
+        self.assertEqual(1, r1.start)
+        self.assertEqual(2, r1.stop)
+        self.assertEqual(None, r1.step)
+
+        r2 = parse_range("9:12")
+        self.assertIsInstance(r2, slice)
+        self.assertEqual(9, r2.start)
+        self.assertEqual(12, r2.stop)
+        self.assertEqual(None, r2.step)
+
+        r3 = parse_range("11:15:2")
+        self.assertIsInstance(r3, slice)
+        self.assertEqual(11, r3.start)
+        self.assertEqual(15, r3.stop)
+        self.assertEqual(2, r3.step)
+
+        r4 = parse_range(":2")
+        self.assertIsInstance(r4, slice)
+        self.assertEqual(0, r4.start)
+        self.assertEqual(2, r4.stop)
+        self.assertEqual(None, r4.step)
+
+        r5 = parse_range("5:")
+        self.assertIsInstance(r5, slice)
+        self.assertEqual(5, r5.start)
+        self.assertEqual(-1, r5.stop)
+        self.assertEqual(None, r5.step)
+
+        r6 = parse_range("1:2:")
+        self.assertIsInstance(r6, slice)
+        self.assertEqual(1, r6.start)
+        self.assertEqual(2, r6.stop)
+        self.assertEqual(1, r6.step)
 
     def test_run_order_range(self):
         with TemporaryDirectory() as tmp_dir:
