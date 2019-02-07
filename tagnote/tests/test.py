@@ -744,6 +744,22 @@ class TestCommandNoUTC(TestCase):
         results = list(results)
         self.assertEqual(0, len(results))
 
+        args = self.parser.parse_args(
+            ["add", note_name, "2019-01-01_01-01-01.txt"]
+        )
+        with self.assertRaises(TagError) as e:
+            Add.run(args, self.config)
+        self.assertEqual(
+            TagError.EXIT_UNSUPPORTED_OPERATION, e.exception.exit_status
+        )
+
+        args = self.parser.parse_args(["add", note_name, note_name])
+        with self.assertRaises(TagError) as e:
+            Add.run(args, self.config)
+        self.assertEqual(
+            TagError.EXIT_UNSUPPORTED_OPERATION, e.exception.exit_status
+        )
+
         args = self.parser.parse_args(["add", "-p", note_name, "note_replica"])
         results = Add.run(args, self.config)
         results = list(results)
@@ -760,6 +776,13 @@ class TestCommandNoUTC(TestCase):
         with self.assertRaises(TagError) as e:
             Add.run(args, self.config)
         self.assertEqual(TagError.EXIT_LABEL_NOT_EXISTS, e.exception.exit_status)
+
+        args = self.parser.parse_args(["add", "base", "base"])
+        with self.assertRaises(TagError) as e:
+            Add.run(args, self.config)
+        self.assertEqual(
+            TagError.EXIT_UNSUPPORTED_OPERATION, e.exception.exit_status
+        )
 
         args = self.parser.parse_args(["add", "base", "todo"])
         results = Add.run(args, self.config)

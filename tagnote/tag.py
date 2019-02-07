@@ -796,6 +796,11 @@ class Add(Command):
                 to_add.setdefault(category)
         for category_name in OrderedDict.fromkeys(arguments.categories).keys():
             category = tag_of(category_name, config.notes_directory)
+            if category == tag:
+                raise TagError(
+                    "Cannot make tag a category of itself: '{}'".format(tag),
+                    TagError.EXIT_UNSUPPORTED_OPERATION
+                )
             if not isinstance(category, Label):
                 raise TagError(
                     "Categories must be labels: '{}'".format(category_name),
