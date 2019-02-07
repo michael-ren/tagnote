@@ -228,6 +228,11 @@ class TestTag(TestCase):
             self.assertEqual(
                 TagError.EXIT_NOTE_NOT_EXISTS, e.exception.exit_status
             )
+            with self.assertRaises(TagError) as e:
+                note.categories()
+            self.assertEqual(
+                TagError.EXIT_NOTE_NOT_EXISTS, e.exception.exit_status
+            )
             note.path().touch()
             self.assertEqual(0, len(list(note.members())))
 
@@ -750,6 +755,11 @@ class TestCommandNoUTC(TestCase):
             [Label("base", self.config.notes_directory)],
             list(results[0].categories())
         )
+
+        args = self.parser.parse_args(["add", "-p", "baloney", note_name])
+        with self.assertRaises(TagError) as e:
+            Add.run(args, self.config)
+        self.assertEqual(TagError.EXIT_LABEL_NOT_EXISTS, e.exception.exit_status)
 
         args = self.parser.parse_args(["add", "base", "todo"])
         results = Add.run(args, self.config)

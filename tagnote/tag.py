@@ -235,6 +235,7 @@ class Tag:
         return True
 
     def categories(self) -> Iterator["Tag"]:
+        self.check_exists()
         matches = (
             tag for tag in all_tags(self.directory)
             if self in tag.members()
