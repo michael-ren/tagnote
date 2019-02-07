@@ -49,19 +49,22 @@ class Config:
             check_string="must be an existing directory"
         ),
         editor=dict(
-            default=[environ.get("EDITOR") or "vim"],
+            default=[
+                environ.get("TAGNOTE_EDITOR") or environ.get("VISUAL")
+                or environ.get("EDITOR") or "vim"
+            ],
             constructor=lambda v: [v] if isinstance(v, str) else v,
             check=lambda v: isinstance(v, Sequence) and which(v[0]),
             check_string="must be a valid command"
         ),
         diff=dict(
-            default=["vimdiff"],
+            default=[environ.get("TAGNOTE_DIFF") or "vimdiff"],
             constructor=lambda v: [v] if isinstance(v, str) else v,
             check=lambda v: isinstance(v, Sequence),
             check_string="must be a command"
         ),
         rsync=dict(
-            default=["rsync"],
+            default=[environ.get("TAGNOTE_RSYNC") or "rsync"],
             constructor=lambda v: [v] if isinstance(v, str) else v,
             check=lambda v: isinstance(v, Sequence),
             check_string="must be a command"
