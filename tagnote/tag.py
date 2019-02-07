@@ -1228,6 +1228,10 @@ def argument_parser() -> ArgumentParser:
         help="A regex in the notes to filter on"
     )
     parser.add_argument(
+        "-y", "--type",
+        help="Return only [n]otes or [l]abels"
+    )
+    parser.add_argument(
         "-o", "--order",
         help="Sort notes [a]scending, [d]escending, or [n]one"
     )
@@ -1267,6 +1271,14 @@ def compile_regex(pattern: str) -> Pattern:
     return regex
 
 
+def parse_type(type_: str) -> Type[Tag]:
+    if type_:
+        for candidate in tag_types():
+            if candidate.tag_type().startswith(type_):
+                return candidate
+    raise TagError("Bad type: '{}'", TagError.EXIT_BAD_TAG_TYPE)
+
+
 def run_filters(results: Iterable[Tag], args: Namespace) -> Iterator[Tag]:
     filters = []
 
@@ -1295,6 +1307,14 @@ def run_filters(results: Iterable[Tag], args: Namespace) -> Iterator[Tag]:
             return t.search_text(search_pattern)
 
         filters.append(search)
+
+    if args.type:
+        type_class = parse_type(args.type)
+
+        def type_(t: Tag) -> bool:
+            return isinstance(t, type_class)
+
+        filters.append(type_)
 
     def all_filters(t: Tag) -> bool:
         for filter_ in filters:

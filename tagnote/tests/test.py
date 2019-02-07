@@ -31,8 +31,8 @@ from tagnote.tag import (
     all_unique_notes, left_pad, format_timestamp, MultipleColumn, SingleColumn,
     tag_types, valid_tag_instance, valid_tag_name,
     argument_parser, Add, Import, parse_range, parse_order, run_order_range,
-    split_timestamp, parse_timestamp, DatePattern, DateRange, run_filters
-)
+    split_timestamp, parse_timestamp, DatePattern, DateRange, run_filters,
+    parse_type)
 
 
 class TestConfig(TestCase):
@@ -853,6 +853,17 @@ class TestCommandNoUTC(TestCase):
 
 
 class TestPostProcessors(TestCase):
+    def test_parse_type(self):
+        self.assertEqual(Note, parse_type("n"))
+        self.assertEqual(Label, parse_type("l"))
+        with self.assertRaises(TagError) as e:
+            parse_type("")
+        self.assertEqual(TagError.EXIT_BAD_TAG_TYPE, e.exception.exit_status)
+
+        with self.assertRaises(TagError) as e:
+            parse_type("zzz")
+        self.assertEqual(TagError.EXIT_BAD_TAG_TYPE, e.exception.exit_status)
+
     def test_filters(self):
         with TemporaryDirectory() as tmp_dir:
             tmp_dir = Path(tmp_dir)
@@ -871,31 +882,48 @@ class TestPostProcessors(TestCase):
 
             null_result = list(
                 run_filters(
-                    tags, Namespace(time=None, name=None, search=None)
+                    tags, Namespace(
+                        time=None, name=None, search=None, type=None
+                    )
                 )
             )
             self.assertEqual(tags, null_result)
 
             search_result = list(
                 run_filters(
-                    tags, Namespace(time=None, name=None, search="this line")
+                    tags, Namespace(
+                        time=None, name=None, search="this line", type=None
+                    )
                 )
             )
             self.assertEqual([note], search_result)
 
             name_result = list(
                 run_filters(
-                    tags, Namespace(time=None, name=".*not.*", search=None)
+                    tags, Namespace(
+                        time=None, name=".*not.*", search=None, type=None
+                    )
                 )
             )
             self.assertEqual([label2], name_result)
 
             date_range_result = list(
                 run_filters(
-                    tags, Namespace(time="*-10:*-*-11", name=None, search=None)
+                    tags, Namespace(
+                        time="*-10:*-*-11", name=None, search=None, type=None
+                    )
                 )
             )
             self.assertEqual([note], date_range_result)
+
+            type_result = list(
+                run_filters(
+                    tags, Namespace(
+                        time=None, name=None, search=None, type="l"
+                    )
+                )
+            )
+            self.assertEqual([label1, label2], type_result)
 
     def test_parse_order(self):
         self.assertEqual(True, parse_order("a"))
