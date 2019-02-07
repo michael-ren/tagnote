@@ -1110,7 +1110,7 @@ class Import(Command):
 
 
 def check_rsync(rsync_command: Sequence[str]) -> None:
-    if which(rsync_command[0]) is None:
+    if len(rsync_command) < 1 or which(rsync_command[0]) is None:
         raise TagError(
             "Could not find rsync command: {}".format(rsync_command),
             TagError.EXIT_UNSUPPORTED_OPERATION
