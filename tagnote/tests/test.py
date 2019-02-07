@@ -40,7 +40,7 @@ class TestConfig(TestCase):
         config = Config()
 
         self.assertIsInstance(config.notes_directory, Path)
-        self.assertEqual(config.notes_directory.name, "notes")
+        self.assertEqual("notes", config.notes_directory.name)
 
         self.assertIsInstance(config.editor, Sequence)
         for argument in config.editor:
@@ -49,9 +49,9 @@ class TestConfig(TestCase):
         self.assertIsInstance(config.rsync, Sequence)
         for argument in config.rsync:
             self.assertIsInstance(argument, str)
-        self.assertEqual(config.rsync[0], "rsync")
+        self.assertEqual("rsync", config.rsync[0])
 
-        self.assertEqual(config.utc, False)
+        self.assertEqual(False, config.utc)
 
     def test_required_property(self):
         p1 = dict(notes_directory=dict())
@@ -67,11 +67,11 @@ class TestConfig(TestCase):
         p1 = dict(notes_directory=dict(constructor=int, default="-1"))
         with patch.object(Config, "PROPERTIES", new=p1):
             c1 = Config()
-            self.assertEqual(c1.notes_directory, -1)
+            self.assertEqual(-1, c1.notes_directory)
 
             override = StringIO('{"notes_directory": "2"}')  # type: TextIO
             c2 = Config(override)
-            self.assertEqual(c2.notes_directory, 2)
+            self.assertEqual(2, c2.notes_directory)
 
         p2 = dict(notes_directory=dict(constructor=int))
         with patch.object(Config, "PROPERTIES", new=p2):
@@ -84,7 +84,7 @@ class TestConfig(TestCase):
             )
             good = StringIO('{"notes_directory": "3"}')  # type: TextIO
             c3 = Config(good)
-            self.assertEqual(c3.notes_directory, 3)
+            self.assertEqual(3, c3.notes_directory)
 
     def test_check_value(self):
         p1 = dict(notes_directory=dict(check=bool, check_string="bar bar bar"))
@@ -99,7 +99,7 @@ class TestConfig(TestCase):
 
             f2 = StringIO('{"notes_directory": "hi"}')  # type: TextIO
             c1 = Config(f2)
-            self.assertEqual(c1.notes_directory, "hi")
+            self.assertEqual("hi", c1.notes_directory)
 
 
 class TestTag(TestCase):
@@ -108,15 +108,15 @@ class TestTag(TestCase):
             Note("2018-05-05_01-01-01", Path())
         self.assertEqual(TagError.EXIT_BAD_NAME, e1.exception.exit_status)
         self.assertEqual(
-            Note("2018-10-10_10-10-10.txt", Path()).name,
-            "2018-10-10_10-10-10.txt"
+            "2018-10-10_10-10-10.txt",
+            Note("2018-10-10_10-10-10.txt", Path()).name
         )
         with self.assertRaises(TagError) as e2:
             Label("todo.txt", Path())
         self.assertEqual(TagError.EXIT_BAD_NAME, e2.exception.exit_status)
         self.assertEqual(
-            Label("todo", Path()).name,
-            "todo"
+            "todo",
+            Label("todo", Path()).name
         )
 
     def test_tag_operators(self):
@@ -127,13 +127,14 @@ class TestTag(TestCase):
         interloper = Interloper()
 
         self.assertEqual(
+            2,
             len(
                 {
                     Label("todo", Path()),
                     Label("todo", Path()),
                     Label("tod", Path())
                 }
-            ), 2
+            )
         )
 
         self.assertEqual(
@@ -228,7 +229,7 @@ class TestTag(TestCase):
                 TagError.EXIT_NOTE_NOT_EXISTS, e3.exception.exit_status
             )
             note.path().touch()
-            self.assertEqual(len(list(note.members())), 0)
+            self.assertEqual(0, len(list(note.members())))
 
             root1, root2 = Label("todo", tmp_dir), Label("1", tmp_dir)
             child1, child2, child3 = (
@@ -238,8 +239,8 @@ class TestTag(TestCase):
             )
             r1c, r2c = root1.create(), root2.create()
             c1c, c2c, c3c = child1.create(), child2.create(), child3.create()
-            self.assertEqual((r1c, r2c), (True, True))
-            self.assertEqual((c1c, c2c, c3c), (True, True, True))
+            self.assertEqual((True, True), (r1c, r2c))
+            self.assertEqual((True, True, True), (c1c, c2c, c3c))
 
             r1c3a = root1.add_member(child3)
             r1c1a = root1.add_member(child1)
@@ -247,27 +248,27 @@ class TestTag(TestCase):
             r2c1a = root2.add_member(child1)
             r2c2a = root2.add_member(child2)
             self.assertEqual(
-                (r1c1a, r1c2a, r1c3a, r2c1a, r2c2a),
-                (True, True, True, True, True)
+                (True, True, True, True, True),
+                (r1c1a, r1c2a, r1c3a, r2c1a, r2c2a)
             )
-            self.assertEqual(set(root1.members()), {child1, child2, child3})
-            self.assertEqual(set(root2.members()), {child1, child2})
-            self.assertEqual(set(child1.categories()), {root1, root2})
-            self.assertEqual(set(child2.categories()), {root1, root2})
-            self.assertEqual(set(child3.categories()), {root1})
+            self.assertEqual({child1, child2, child3}, set(root1.members()))
+            self.assertEqual({child1, child2}, set(root2.members()))
+            self.assertEqual({root1, root2}, set(child1.categories()))
+            self.assertEqual({root1, root2}, set(child2.categories()))
+            self.assertEqual({root1}, set(child3.categories()))
 
             r1c1a2 = root1.add_member(child1)
             r1c2a2 = root1.add_member(child2)
             r1c3a2 = root1.add_member(child3)
-            self.assertEqual((r1c1a2, r1c2a2, r1c3a2), (False, False, False))
+            self.assertEqual((False, False, False), (r1c1a2, r1c2a2, r1c3a2))
 
             r1c2d = root1.remove_member(child2)
-            self.assertEqual(r1c2d, True)
-            self.assertEqual(set(root1.members()), {child1, child3})
-            self.assertEqual(set(child2.categories()), {root2})
+            self.assertEqual(True, r1c2d)
+            self.assertEqual({child1, child3}, set(root1.members()))
+            self.assertEqual({root2}, set(child2.categories()))
 
             r1c2d2 = root1.remove_member(child2)
-            self.assertEqual(r1c2d2, False)
+            self.assertEqual(False, r1c2d2)
 
             fake_child1 = Label("foo", tmp_dir)
             root1.add_member(fake_child1)
@@ -288,10 +289,10 @@ class TestTag(TestCase):
     # noinspection PyTypeChecker
     def test_static_tag_helpers(self):
         self.assertEqual(
-            type(tag_of("todo", Path())), Label
+            Label, type(tag_of("todo", Path()))
         )
         self.assertEqual(
-            type(tag_of("2018-10-10_10-10-10.txt", Path())), Note
+            Note, type(tag_of("2018-10-10_10-10-10.txt", Path()))
         )
         with self.assertRaises(TagError) as e1:
             tag_of("todo.txt", Path())
@@ -365,11 +366,11 @@ class TestTag(TestCase):
 
             note1 = Note("2018-10-10_09-09-09.txt", tmp_dir)
             note1.path().touch()
-            self.assertEqual(list(AllTagsFrom(note1)), [note1])
+            self.assertEqual([note1], list(AllTagsFrom(note1)))
 
             label1 = Label("foo", tmp_dir)
             label1.create()
-            self.assertEqual(list(AllTagsFrom(label1)), [label1])
+            self.assertEqual([label1], list(AllTagsFrom(label1)))
 
             node_1_1 = Label("all", tmp_dir)
             node_2_1 = Label("work", tmp_dir)
@@ -402,7 +403,6 @@ class TestTag(TestCase):
             all_ = list(AllTagsFrom(node_1_1))
             all_.sort()
             self.assertEqual(
-                all_,
                 [
                     node_2_3, node_3_1, node_4_1,
                     node_1_1,
@@ -410,24 +410,25 @@ class TestTag(TestCase):
                     node_2_2,
                     node_2_1,
                     node_3_2, node_3_3,
-                ]
+                ],
+                all_
             )
 
             notes = list(AllTagsFrom(node_1_1, Note))
             notes.sort()
-            self.assertEqual(notes, [node_2_3, node_3_1, node_4_1])
+            self.assertEqual([node_2_3, node_3_1, node_4_1], notes)
 
             labels = list(AllTagsFrom(node_1_1, Label))
             labels.sort()
             self.assertEqual(
-                labels,
                 [
                     node_1_1,
                     node_loop_1, node_loop_2, node_loop_3,
                     node_2_2,
                     node_2_1,
                     node_3_2, node_3_3,
-                ]
+                ],
+                labels
             )
 
     def test_all_unique_notes(self):
@@ -453,8 +454,8 @@ class TestTag(TestCase):
             )
             notes.sort()
             self.assertEqual(
-                notes,
-                [note1, note2, note3]
+                [note1, note2, note3],
+                notes
             )
 
 
@@ -467,8 +468,8 @@ class TestFormat(TestCase):
         with self.assertRaises(ValueError):
             left_pad("something", 2, "h")
         self.assertEqual(
-            left_pad("hi", 10, " "),
-            "        hi"
+            "        hi",
+            left_pad("hi", 10, " ")
         )
 
     def test_format_timestamp(self):
@@ -480,7 +481,7 @@ class TestFormat(TestCase):
             minute=7,
             second=6
         )
-        self.assertEqual(format_timestamp(t1), "2018-10-09_08-07-06")
+        self.assertEqual("2018-10-09_08-07-06", format_timestamp(t1))
 
     def test_split_timestamp(self):
         with self.assertRaises(TagError) as e:
@@ -565,10 +566,10 @@ class TestFormat(TestCase):
                 with patch("tagnote.tag.MultipleColumn.PADDING", new=1):
                     MultipleColumn.format(["1", "10", "110", "111", "112"])
                     self.assertEqual(
-                        stdout.getvalue(),
                         "1   111\n"
                         "10  112\n"
-                        "110\n"
+                        "110\n",
+                        stdout.getvalue()
                     )
 
     def test_multicolumn_overflow(self):
@@ -580,8 +581,8 @@ class TestFormat(TestCase):
                 with patch("tagnote.tag.MultipleColumn.PADDING", new=1):
                     MultipleColumn.format(["hello", "1"])
                     self.assertEqual(
-                        stdout.getvalue(),
-                        "hello\n1\n"
+                        "hello\n1\n",
+                        stdout.getvalue()
                     )
 
     def test_single_column(self):
@@ -589,8 +590,8 @@ class TestFormat(TestCase):
         with patch("tagnote.tag.stdout", new=stdout):
             SingleColumn.format(["single", "column", "format"])
             self.assertEqual(
-                stdout.getvalue(),
-                "single\ncolumn\nformat\n"
+                "single\ncolumn\nformat\n",
+                stdout.getvalue()
             )
 
 
