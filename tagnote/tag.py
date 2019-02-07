@@ -54,6 +54,12 @@ class Config:
             check=lambda v: isinstance(v, Sequence) and which(v[0]),
             check_string="must be a valid command"
         ),
+        diff=dict(
+            default=["vimdiff"],
+            constructor=lambda v: [v] if isinstance(v, str) else v,
+            check=lambda v: isinstance(v, Sequence),
+            check_string="must be a command"
+        ),
         rsync=dict(
             default=["rsync"],
             constructor=lambda v: [v] if isinstance(v, str) else v,
@@ -70,6 +76,7 @@ class Config:
     def __init__(self, file: Optional[TextIO] = None) -> None:
         self.notes_directory = None  # type: Optional[Path]
         self.editor = None  # type: Optional[Sequence[str]]
+        self.diff = None  # type: Optional[Sequence[str]]
         self.rsync = None  # type: Optional[Sequence[str]]
         self.utc = None  # type: Optional[bool]
 
@@ -932,6 +939,14 @@ class Show(Command):
             cls.print(tag)
 
 
+def check_diff(diff_command: Sequence[str]) -> None:
+    if len(diff_command) < 1 or which(diff_command[0]) is None:
+        raise TagError(
+            "Could not find diff command: {}".format(diff_command),
+            TagError.EXIT_UNSUPPORTED_OPERATION
+        )
+
+
 class Last(Command):
     NAME = "last"
 
@@ -948,6 +963,10 @@ class Last(Command):
     @classmethod
     def arguments(cls, parser: ArgumentParser) -> None:
         parser.add_argument(
+            "-d", "--diff", action="store_true",
+            help="Run the diff editor on the last two files instead"
+        )
+        parser.add_argument(
             "tags", nargs="*", help="The tags to search, else all"
         )
 
@@ -960,14 +979,7 @@ class Last(Command):
             )
         else:
             tags = all_tags(config.notes_directory, Note)
-        last = None
-        for tag in tags:
-            if last is None or tag > last:
-                last = tag
-        if last:
-            return iter([last])
-        else:
-            return iter([])
+        return tags
 
     @classmethod
     def format(
@@ -977,15 +989,29 @@ class Last(Command):
             config: Config,
             formatter: Type[Formatter]
             ) -> None:
+        last = None
+        second_to_last = None
         for tag in tags:
-            command = [*config.editor, str(tag.path())]
-            try:
-                subprocess_run(command, check=True)
-            except (CalledProcessError, FileNotFoundError) as e:
-                raise TagError(
-                    "Editor command {} failed.".format(command),
-                    TagError.EXIT_EDITOR_FAILED
-                ) from e
+            if last is None or tag > last:
+                second_to_last = last
+                last = tag
+
+        if arguments.diff and last is not None and second_to_last is not None:
+            command = [
+                *config.diff, str(second_to_last.path()), str(last.path())
+            ]
+        elif not arguments.diff and last is not None:
+            command = [*config.editor, str(last.path())]
+        else:
+            return
+
+        try:
+            subprocess_run(command, check=True)
+        except (CalledProcessError, FileNotFoundError) as e:
+            raise TagError(
+                "Editor command {} failed.".format(command),
+                TagError.EXIT_EDITOR_FAILED
+            ) from e
 
 
 class Remove(Command):
