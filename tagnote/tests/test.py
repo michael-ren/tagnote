@@ -56,11 +56,11 @@ class TestConfig(TestCase):
     def test_required_property(self):
         p1 = dict(notes_directory=dict())
         with patch.object(Config, "PROPERTIES", new=p1):
-            with self.assertRaises(TagError) as e1:
+            with self.assertRaises(TagError) as e:
                 Config()
             self.assertEqual(
                 TagError.EXIT_CONFIG_REQUIRED_PROPERTY,
-                e1.exception.exit_status
+                e.exception.exit_status
             )
 
     def test_constructor(self):
@@ -76,11 +76,11 @@ class TestConfig(TestCase):
         p2 = dict(notes_directory=dict(constructor=int))
         with patch.object(Config, "PROPERTIES", new=p2):
             bad = StringIO('{"notes_directory": "foo"}')  # type: TextIO
-            with self.assertRaises(TagError) as e1:
+            with self.assertRaises(TagError) as e:
                 Config(bad)
             self.assertEqual(
                 TagError.EXIT_CONFIG_CONSTRUCTOR_FAILED,
-                e1.exception.exit_status
+                e.exception.exit_status
             )
             good = StringIO('{"notes_directory": "3"}')  # type: TextIO
             c3 = Config(good)
@@ -90,12 +90,12 @@ class TestConfig(TestCase):
         p1 = dict(notes_directory=dict(check=bool, check_string="bar bar bar"))
         with patch.object(Config, "PROPERTIES", new=p1):
             f1 = StringIO('{"notes_directory": ""}')  # type: TextIO
-            with self.assertRaises(TagError) as e1:
+            with self.assertRaises(TagError) as e:
                 Config(f1)
             self.assertEqual(
-                TagError.EXIT_CONFIG_CHECK_FAILED, e1.exception.exit_status
+                TagError.EXIT_CONFIG_CHECK_FAILED, e.exception.exit_status
             )
-            self.assertTrue(str(e1.exception).endswith("bar bar bar."))
+            self.assertTrue(str(e.exception).endswith("bar bar bar."))
 
             f2 = StringIO('{"notes_directory": "hi"}')  # type: TextIO
             c1 = Config(f2)
@@ -104,16 +104,16 @@ class TestConfig(TestCase):
 
 class TestTag(TestCase):
     def test_tag_names(self):
-        with self.assertRaises(TagError) as e1:
+        with self.assertRaises(TagError) as e:
             Note("2018-05-05_01-01-01", Path())
-        self.assertEqual(TagError.EXIT_BAD_NAME, e1.exception.exit_status)
+        self.assertEqual(TagError.EXIT_BAD_NAME, e.exception.exit_status)
         self.assertEqual(
             "2018-10-10_10-10-10.txt",
             Note("2018-10-10_10-10-10.txt", Path()).name
         )
-        with self.assertRaises(TagError) as e2:
+        with self.assertRaises(TagError) as e:
             Label("todo.txt", Path())
-        self.assertEqual(TagError.EXIT_BAD_NAME, e2.exception.exit_status)
+        self.assertEqual(TagError.EXIT_BAD_NAME, e.exception.exit_status)
         self.assertEqual(
             "todo",
             Label("todo", Path()).name
@@ -178,16 +178,16 @@ class TestTag(TestCase):
             tmp_dir = Path(tmp_dir)
 
             note = Note("2018-10-10_10-10-10.txt", tmp_dir)
-            with self.assertRaises(TagError) as e1:
+            with self.assertRaises(TagError) as e:
                 note.create()
             self.assertEqual(
-                TagError.EXIT_NOTE_NOT_EXISTS, e1.exception.exit_status
+                TagError.EXIT_NOTE_NOT_EXISTS, e.exception.exit_status
             )
-            with self.assertRaises(TagError) as e2:
+            with self.assertRaises(TagError) as e:
                 p0 = re_compile("baz")
                 note.search_text(p0)
             self.assertEqual(
-                TagError.EXIT_NOTE_NOT_EXISTS, e2.exception.exit_status
+                TagError.EXIT_NOTE_NOT_EXISTS, e.exception.exit_status
             )
 
             with note.path().open("w") as f:
@@ -213,20 +213,20 @@ class TestTag(TestCase):
             tmp_dir = Path(tmp_dir)
 
             note = Note("2018-10-10_10-10-10.txt", tmp_dir)
-            with self.assertRaises(TagError) as e1:
+            with self.assertRaises(TagError) as e:
                 note.add_member(Label("todo", tmp_dir))
             self.assertEqual(
-                TagError.EXIT_UNSUPPORTED_OPERATION, e1.exception.exit_status
+                TagError.EXIT_UNSUPPORTED_OPERATION, e.exception.exit_status
             )
-            with self.assertRaises(TagError) as e2:
+            with self.assertRaises(TagError) as e:
                 note.remove_member(Label("todo", tmp_dir))
             self.assertEqual(
-                TagError.EXIT_UNSUPPORTED_OPERATION, e2.exception.exit_status
+                TagError.EXIT_UNSUPPORTED_OPERATION, e.exception.exit_status
             )
-            with self.assertRaises(TagError) as e3:
+            with self.assertRaises(TagError) as e:
                 note.members()
             self.assertEqual(
-                TagError.EXIT_NOTE_NOT_EXISTS, e3.exception.exit_status
+                TagError.EXIT_NOTE_NOT_EXISTS, e.exception.exit_status
             )
             note.path().touch()
             self.assertEqual(0, len(list(note.members())))
@@ -272,10 +272,10 @@ class TestTag(TestCase):
 
             fake_child1 = Label("foo", tmp_dir)
             root1.add_member(fake_child1)
-            with self.assertRaises(TagError) as e4:
+            with self.assertRaises(TagError) as e:
                 list(root1.members())
             self.assertEqual(
-                TagError.EXIT_LABEL_NOT_EXISTS, e4.exception.exit_status
+                TagError.EXIT_LABEL_NOT_EXISTS, e.exception.exit_status
             )
 
     def test_note_convert_timestamp(self):
@@ -294,19 +294,19 @@ class TestTag(TestCase):
         self.assertEqual(
             Note, type(tag_of("2018-10-10_10-10-10.txt", Path()))
         )
-        with self.assertRaises(TagError) as e1:
+        with self.assertRaises(TagError) as e:
             tag_of("todo.txt", Path())
-        self.assertEqual(TagError.EXIT_BAD_NAME, e1.exception.exit_status)
+        self.assertEqual(TagError.EXIT_BAD_NAME, e.exception.exit_status)
 
-        with self.assertRaises(TagError) as e2:
+        with self.assertRaises(TagError) as e:
             tag_types(1)
-        self.assertEqual(TagError.EXIT_BAD_TAG_TYPE, e2.exception.exit_status)
-        with self.assertRaises(TagError) as e3:
+        self.assertEqual(TagError.EXIT_BAD_TAG_TYPE, e.exception.exit_status)
+        with self.assertRaises(TagError) as e:
             valid_tag_name("foo", Path)
-        self.assertEqual(TagError.EXIT_BAD_TAG_TYPE, e3.exception.exit_status)
-        with self.assertRaises(TagError) as e4:
+        self.assertEqual(TagError.EXIT_BAD_TAG_TYPE, e.exception.exit_status)
+        with self.assertRaises(TagError) as e:
             valid_tag_instance(Label("foo", Path()), Path)
-        self.assertEqual(TagError.EXIT_BAD_TAG_TYPE, e4.exception.exit_status)
+        self.assertEqual(TagError.EXIT_BAD_TAG_TYPE, e.exception.exit_status)
         self.assertTrue(valid_tag_name("foo", Label))
         self.assertTrue(valid_tag_instance(Label("foo", Path())), Label)
         self.assertTrue(valid_tag_name("2018-10-10_10-10-10.txt", Note))
@@ -317,12 +317,12 @@ class TestTag(TestCase):
         self.assertTrue(valid_tag_instance(Label("bar", Path())))
 
     def test_all_tags(self):
-        with self.assertRaises(TagError) as e1:
+        with self.assertRaises(TagError) as e:
             with TemporaryDirectory() as tmp_dir:
                 tmp_dir = Path(tmp_dir)
             all_tags(tmp_dir)
         self.assertEqual(
-            TagError.EXIT_DIRECTORY_NOT_FOUND, e1.exception.exit_status
+            TagError.EXIT_DIRECTORY_NOT_FOUND, e.exception.exit_status
         )
         with TemporaryDirectory() as tmp_dir:
             tmp_dir = Path(tmp_dir)
@@ -549,13 +549,13 @@ class TestFormat(TestCase):
             datetime(2018, 5, 1), partial
         )
 
-        with self.assertRaises(TagError) as e1:
+        with self.assertRaises(TagError) as e:
             parse_timestamp("2018-01-02_10-09-a")
-        self.assertEqual(TagError.EXIT_BAD_TIMESTAMP, e1.exception.exit_status)
+        self.assertEqual(TagError.EXIT_BAD_TIMESTAMP, e.exception.exit_status)
 
-        with self.assertRaises(TagError) as e2:
+        with self.assertRaises(TagError) as e:
             parse_timestamp("2018-05")
-        self.assertEqual(TagError.EXIT_BAD_TIMESTAMP, e2.exception.exit_status)
+        self.assertEqual(TagError.EXIT_BAD_TIMESTAMP, e.exception.exit_status)
 
     def test_multicolumn_common(self):
         def get_terminal_size():
@@ -662,10 +662,10 @@ class TestDatePatternRange(TestCase):
             __ = pattern >= "pie"
 
     def test_date_range(self):
-        with self.assertRaises(TagError) as e1:
+        with self.assertRaises(TagError) as e:
             DateRange.from_string("1:2:3")
         self.assertEqual(
-            TagError.EXIT_BAD_DATE_RANGE, e1.exception.exit_status
+            TagError.EXIT_BAD_DATE_RANGE, e.exception.exit_status
         )
 
         single = DateRange.from_string("2018")
@@ -715,11 +715,11 @@ class TestCommandNoUTC(TestCase):
         note_name = "2018-10-06_22-15-53.txt"
 
         args = self.parser.parse_args(["add", note_name])
-        with self.assertRaises(TagError) as e1:
+        with self.assertRaises(TagError) as e:
             Add.run(args, self.config)
         self.assertEqual(
             TagError.EXIT_NOTE_NOT_EXISTS,
-            e1.exception.exit_status
+            e.exception.exit_status
         )
 
         note_path = Path(self.config.notes_directory, note_name)
@@ -798,27 +798,27 @@ class TestCommandNoUTC(TestCase):
                 results[0].name
             )
 
-            with self.assertRaises(TagError) as e1:
+            with self.assertRaises(TagError) as e:
                 Import.run(args, self.config)
             self.assertEqual(
                 TagError.EXIT_NOTE_EXISTS,
-                e1.exception.exit_status
+                e.exception.exit_status
             )
 
 
 class TestPostProcessors(TestCase):
     def test_parse_range(self):
-        with self.assertRaises(TagError) as e1:
+        with self.assertRaises(TagError) as e:
             parse_range("      ")
-        self.assertEqual(TagError.EXIT_BAD_RANGE, e1.exception.exit_status)
+        self.assertEqual(TagError.EXIT_BAD_RANGE, e.exception.exit_status)
 
-        with self.assertRaises(TagError) as e2:
+        with self.assertRaises(TagError) as e:
             parse_range("::::")
-        self.assertEqual(TagError.EXIT_BAD_RANGE, e2.exception.exit_status)
+        self.assertEqual(TagError.EXIT_BAD_RANGE, e.exception.exit_status)
 
-        with self.assertRaises(TagError) as e3:
+        with self.assertRaises(TagError) as e:
             parse_range("foo:bar")
-        self.assertEqual(TagError.EXIT_BAD_RANGE, e3.exception.exit_status)
+        self.assertEqual(TagError.EXIT_BAD_RANGE, e.exception.exit_status)
 
         r1 = parse_range("1")
         self.assertIsInstance(r1, slice)
@@ -884,13 +884,13 @@ class TestPostProcessors(TestCase):
         self.assertEqual(True, parse_order("a"))
         self.assertEqual(False, parse_order("d"))
         self.assertEqual(None, parse_order("n"))
-        with self.assertRaises(TagError) as e1:
+        with self.assertRaises(TagError) as e:
             parse_order("")
-        self.assertEqual(TagError.EXIT_BAD_ORDER, e1.exception.exit_status)
+        self.assertEqual(TagError.EXIT_BAD_ORDER, e.exception.exit_status)
 
-        with self.assertRaises(TagError) as e2:
+        with self.assertRaises(TagError) as e:
             parse_order("zzz")
-        self.assertEqual(TagError.EXIT_BAD_ORDER, e2.exception.exit_status)
+        self.assertEqual(TagError.EXIT_BAD_ORDER, e.exception.exit_status)
 
     def test_run_order_range(self):
         with TemporaryDirectory() as tmp_dir:
