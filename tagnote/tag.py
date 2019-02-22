@@ -486,33 +486,26 @@ def all_tags(
 
 class AllTagsFrom(Iterator):
     def __init__(
-            self, category: Tag, tag_type: Optional[Type[Tag]] = None
+            self,
+            categories: Iterable[Tag],
+            tag_type: Optional[Type[Tag]] = None
             ) -> None:
-        self.category = category
+        self.categories = categories
         self.tag_type = tag_type
         self.visited = set()
-        self.remaining = OrderedDict()
-        self.remaining.setdefault(category)
+        self.remaining = deque(categories)
 
-    def __next__(self):
+    def __next__(self) -> Tag:
         while self.remaining:
-            # BFS
-            current_tag, __ = self.remaining.popitem(last=False)
+            # BFS queue: add to the right, pop from the left
+            current_tag = self.remaining.popleft()
             self.visited.add(current_tag)
             for member in current_tag.members():
                 if member not in self.visited:
-                    self.remaining.setdefault(member)
+                    self.remaining.append(member)
             if valid_tag_instance(current_tag, self.tag_type):
                 return current_tag
         raise StopIteration
-
-
-def all_unique_notes(roots: Iterable[Tag]) -> Iterator[Note]:
-    notes = set()
-    for root in roots:
-        for note in AllTagsFrom(root, Note):
-            notes.add(note)
-    return iter(notes)
 
 
 def left_pad(text: str, length: int, padding: str) -> str:
@@ -919,9 +912,12 @@ class Show(Command):
     @classmethod
     def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
         if arguments.tags:
-            return all_unique_notes(
-                tag_of(name, config.notes_directory)
-                for name in set(arguments.tags)
+            return AllTagsFrom(
+                (
+                    tag_of(name, config.notes_directory)
+                    for name in set(arguments.tags)
+                ),
+                Note
             )
         else:
             return all_tags(config.notes_directory, Note)
@@ -980,9 +976,12 @@ class Last(Command):
     @classmethod
     def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
         if arguments.tags:
-            tags = all_unique_notes(
-                tag_of(name, config.notes_directory)
-                for name in set(arguments.tags)
+            tags = AllTagsFrom(
+                (
+                    tag_of(name, config.notes_directory)
+                    for name in set(arguments.tags)
+                ),
+                Note
             )
         else:
             tags = all_tags(config.notes_directory, Note)

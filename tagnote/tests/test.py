@@ -28,7 +28,7 @@ from argparse import Namespace
 
 from tagnote.tag import (
     Note, Label, tag_of, TagError, Config, all_tags, AllTagsFrom,
-    all_unique_notes, left_pad, format_timestamp, MultipleColumn, SingleColumn,
+    left_pad, format_timestamp, MultipleColumn, SingleColumn,
     tag_types, valid_tag_instance, valid_tag_name,
     argument_parser, Add, Import, parse_range, parse_order, run_order_range,
     split_timestamp, parse_timestamp, DatePattern, DateRange, run_filters,
@@ -403,11 +403,11 @@ class TestTag(TestCase):
 
             note1 = Note("2018-10-10_09-09-09.txt", tmp_dir)
             note1.path().touch()
-            self.assertEqual([note1], list(AllTagsFrom(note1)))
+            self.assertEqual([note1], list(AllTagsFrom([note1])))
 
             label1 = Label("foo", tmp_dir)
             label1.create()
-            self.assertEqual([label1], list(AllTagsFrom(label1)))
+            self.assertEqual([label1], list(AllTagsFrom([label1])))
 
             node_1_1 = Label("all", tmp_dir)
             node_2_1 = Label("work", tmp_dir)
@@ -437,7 +437,7 @@ class TestTag(TestCase):
             node_loop_2.add_member(node_loop_3)
             node_loop_3.add_member(node_1_1)
 
-            all_ = list(AllTagsFrom(node_1_1))
+            all_ = list(AllTagsFrom([node_1_1]))
             all_.sort()
             self.assertEqual(
                 [
@@ -451,11 +451,11 @@ class TestTag(TestCase):
                 all_
             )
 
-            notes = list(AllTagsFrom(node_1_1, Note))
+            notes = list(AllTagsFrom([node_1_1], Note))
             notes.sort()
             self.assertEqual([node_2_3, node_3_1, node_4_1], notes)
 
-            labels = list(AllTagsFrom(node_1_1, Label))
+            labels = list(AllTagsFrom([node_1_1], Label))
             labels.sort()
             self.assertEqual(
                 [
@@ -466,33 +466,6 @@ class TestTag(TestCase):
                     node_3_2, node_3_3,
                 ],
                 labels
-            )
-
-    def test_all_unique_notes(self):
-        with TemporaryDirectory() as tmp_dir:
-            tmp_dir = Path(tmp_dir)
-            label1 = Label("todo", tmp_dir)
-            label2 = Label("work", tmp_dir)
-            note1 = Note("2018-10-10_10-10-10.txt", tmp_dir)
-            note2 = Note("2018-10-10_10-10-11.txt", tmp_dir)
-            note3 = Note("2018-10-10_10-10-12.txt", tmp_dir)
-            label1.create()
-            label2.create()
-            note1.path().touch()
-            note2.path().touch()
-            note3.path().touch()
-            label1.add_member(note1)
-            label1.add_member(note2)
-            label1.add_member(note3)
-            label2.add_member(note1)
-            label2.add_member(note2)
-            notes = list(
-                all_unique_notes([label1, label2, note1, note2, note3])
-            )
-            notes.sort()
-            self.assertEqual(
-                [note1, note2, note3],
-                notes
             )
 
 
