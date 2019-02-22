@@ -472,20 +472,16 @@ def all_tags(
         directory: Path, tag_type: Optional[Type[Tag]] = None
         ) -> Iterator[Tag]:
     try:
-        directories = scandir(str(directory))
+        directory_scan = scandir(str(directory))
     except FileNotFoundError as e:
         raise TagError(
             "Directory not found: '{}'".format(directory),
             TagError.EXIT_DIRECTORY_NOT_FOUND
         ) from e
-    all_files = (
-        entry.name for entry in directories if entry.is_file()
+    return (
+        tag_of(entry.name, directory) for entry in directory_scan
+        if entry.is_file() and valid_tag_name(entry.name, tag_type)
     )
-    tags = (
-        tag_of(file, directory) for file in all_files
-        if valid_tag_name(file, tag_type)
-    )
-    return tags
 
 
 class AllTagsFrom(Iterator):
