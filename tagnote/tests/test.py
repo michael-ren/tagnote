@@ -733,7 +733,7 @@ class TestDatePatternRange(TestCase):
         self.assertTrue(double.match(DatePattern(None, None, None, None, 13)))
 
 
-class TestCommandNoUTC(TestCase):
+class TestCommand(TestCase):
     @classmethod
     def setUpClass(cls):
         cls.parser = argument_parser()
@@ -746,6 +746,16 @@ class TestCommandNoUTC(TestCase):
                     {
                         "notes_directory": self.notes_directory.name,
                         "utc": False
+                    }
+                )
+            )
+        )
+        self.config_utc = Config(
+            StringIO(
+                dumps(
+                    {
+                        "notes_directory": self.notes_directory.name,
+                        "utc": True
                     }
                 )
             )
@@ -855,22 +865,22 @@ class TestCommandNoUTC(TestCase):
 
     def test_import(self):
         with NamedTemporaryFile(dir=self.notes_directory.name) as tmp_file:
-            # 2018-10-06_16-17-30
+            # 2018-10-06_20-17-30
             seconds = 1538857050
             utime(tmp_file.name, times=(seconds, seconds))
 
             args = self.parser.parse_args(["import", tmp_file.name])
-            results = Import.run(args, self.config)
+            results = Import.run(args, self.config_utc)
             results = list(results)
             self.assertEqual(1, len(results))
             self.assertTrue(results[0].exists())
             self.assertEqual(
-                "2018-10-06_16-17-30.txt",
+                "2018-10-06_20-17-30.txt",
                 results[0].name
             )
 
             with self.assertRaises(TagError) as e:
-                Import.run(args, self.config)
+                Import.run(args, self.config_utc)
             self.assertEqual(
                 TagError.EXIT_NOTE_EXISTS,
                 e.exception.exit_status
@@ -878,7 +888,7 @@ class TestCommandNoUTC(TestCase):
 
         args = self.parser.parse_args(["import", tmp_file.name])
         with self.assertRaises(TagError) as e:
-            Import.run(args, self.config)
+            Import.run(args, self.config_utc)
         self.assertEqual(
             TagError.EXIT_IMPORT_FILE_NOT_EXISTS, e.exception.exit_status
         )
