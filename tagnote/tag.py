@@ -1169,6 +1169,16 @@ class Pull(Command):
 
     @classmethod
     def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
+        return iter([])
+
+    @classmethod
+    def format(
+            cls,
+            tags: Iterable[Tag],
+            arguments: Namespace,
+            config: Config,
+            formatter: Type[Formatter]
+            ) -> None:
         check_rsync(config.rsync)
         if config.utc:
             now = datetime.utcnow()
@@ -1183,7 +1193,6 @@ class Pull(Command):
                 "{}/".format(config.notes_directory)
             ]
         )
-        return iter([])
 
 
 class Push(Command):
@@ -1205,6 +1214,16 @@ class Push(Command):
 
     @classmethod
     def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
+        return iter([])
+
+    @classmethod
+    def format(
+            cls,
+            tags: Iterable[Tag],
+            arguments: Namespace,
+            config: Config,
+            formatter: Type[Formatter]
+            ) -> None:
         check_rsync(config.rsync)
         if config.utc:
             now = datetime.utcnow()
