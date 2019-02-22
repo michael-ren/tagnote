@@ -27,12 +27,12 @@ from json import dumps
 from argparse import Namespace
 
 from tagnote.tag import (
-    Note, Label, tag_of, TagError, Config, all_tags, AllTagsFrom,
+    Note, Label, tag_of, TagError, Config, all_non_tags, all_tags, AllTagsFrom,
     left_pad, format_timestamp, MultipleColumn, SingleColumn,
     tag_types, valid_tag_instance, valid_tag_name,
     argument_parser, Add, Import, parse_range, parse_order, run_order_range,
     split_timestamp, parse_timestamp, DatePattern, DateRange, run_filters,
-    parse_type, compile_regex, read_config_file)
+    parse_type, compile_regex, read_config_file, parse_backup_file, Reconcile)
 
 
 class TestConfig(TestCase):
@@ -353,6 +353,24 @@ class TestTag(TestCase):
         self.assertTrue(valid_tag_name("bar"))
         self.assertTrue(valid_tag_instance(Label("bar", Path())))
 
+    def test_all_non_tags(self):
+        with TemporaryDirectory() as tmp_dir:
+            swap_file = Path(tmp_dir, ".swp")
+            with swap_file.open("w") as f:
+                f.write("")
+            backup_file = Path(tmp_dir, "test.2018-01-02_03-04-05.bak")
+            with backup_file.open("w") as f:
+                f.write("")
+            self.assertEqual(
+                {swap_file, backup_file},
+                set(all_non_tags(Path(tmp_dir)))
+            )
+        with self.assertRaises(TagError) as e:
+            all_non_tags(Path(tmp_dir))
+        self.assertEqual(
+            TagError.EXIT_DIRECTORY_NOT_FOUND, e.exception.exit_status
+        )
+
     def test_all_tags(self):
         with self.assertRaises(TagError) as e:
             with TemporaryDirectory() as tmp_dir:
@@ -566,6 +584,35 @@ class TestFormat(TestCase):
         with self.assertRaises(TagError) as e:
             parse_timestamp("2018-05")
         self.assertEqual(TagError.EXIT_BAD_TIMESTAMP, e.exception.exit_status)
+
+    def test_parse_backup_file(self):
+        self.assertEqual(
+            ("2018-01-01_01-01-01.txt", "2018-10-10_05-05-05", "bak"),
+            parse_backup_file(
+                "2018-01-01_01-01-01.txt.2018-10-10_05-05-05.bak"
+            )
+        )
+
+        self.assertEqual(
+            ("test", "2018-05-05_05-05-05", "bak"),
+            parse_backup_file("test.2018-05-05_05-05-05.bak")
+        )
+
+        with self.assertRaises(TagError) as e:
+            parse_backup_file("foo.bar")
+        self.assertEqual(TagError.EXIT_BAD_NAME, e.exception.exit_status)
+
+        with self.assertRaises(TagError) as e:
+            parse_backup_file("foo.2018-01-01_02-02-02.txt")
+        self.assertEqual(TagError.EXIT_BAD_NAME, e.exception.exit_status)
+
+        with self.assertRaises(TagError) as e:
+            parse_backup_file("!!.2019-01-01_02-03-04.bak")
+        self.assertEqual(TagError.EXIT_BAD_NAME, e.exception.exit_status)
+
+        with self.assertRaises(TagError) as e:
+            parse_backup_file("foo.2019.bak")
+        self.assertEqual(TagError.EXIT_BAD_NAME, e.exception.exit_status)
 
     def test_multicolumn_null(self):
         stdout = StringIO()
@@ -865,6 +912,115 @@ class TestCommand(TestCase):
         self.assertEqual(
             TagError.EXIT_IMPORT_FILE_NOT_EXISTS, e.exception.exit_status
         )
+
+    def test_reconcile_backup_files_by_tag(self):
+        with TemporaryDirectory() as tmp_dir:
+            tmp_dir = Path(tmp_dir)
+            files = [
+                ".foo.swp",
+                "bar",
+                "bar.2018-01-02_03-04-05.bak",
+                "rab",
+                "2018-02-03_04-05-06.txt",
+                "2018-02-03_04-05-06.txt.2018-02-03_01-05-06.bak",
+                "2018-02-03_04-05-06.txt.2018-02-03_02-05-06.bak",
+                "zaire",
+                "zaire.2018-04-04_04-04-04.bak"
+            ]
+            for file in files:
+                with Path(tmp_dir, file).open("w") as f:
+                    f.write("")
+            Label("bar", tmp_dir).add_member(
+                Label("rab", tmp_dir)
+            )
+            Label("rab", tmp_dir).add_member(
+                Note("2018-02-03_04-05-06.txt", tmp_dir)
+            )
+
+            bar = {
+                Label("bar", tmp_dir): [
+                    Path(tmp_dir, "bar.2018-01-02_03-04-05.bak")
+                ]
+            }
+            zaire = {
+                Label("zaire", tmp_dir): [
+                    Path(tmp_dir, "zaire.2018-04-04_04-04-04.bak")
+                ]
+            }
+            note = {
+                Note("2018-02-03_04-05-06.txt", tmp_dir): [
+                    Path(
+                        tmp_dir,
+                        "2018-02-03_04-05-06.txt.2018-02-03_01-05-06.bak"
+                    ),
+                    Path(
+                        tmp_dir,
+                        "2018-02-03_04-05-06.txt.2018-02-03_02-05-06.bak"
+                    )
+                ]
+            }
+
+            self.assertEqual(
+                {
+                    **bar,
+                    **zaire,
+                    **note
+                },
+                Reconcile.backup_files_by_tag(tmp_dir)
+            )
+
+            self.assertEqual(
+                {
+                    **bar,
+                    **note
+                },
+                Reconcile.backup_files_by_tag(tmp_dir, [Label("bar", tmp_dir)])
+            )
+
+            self.assertEqual(
+                {
+                    **note
+                },
+                Reconcile.backup_files_by_tag(
+                    tmp_dir, [Note("2018-02-03_04-05-06.txt", tmp_dir)]
+                )
+            )
+
+            self.assertEqual(
+                {
+                    **note,
+                    **zaire
+                },
+                Reconcile.backup_files_by_tag(
+                    tmp_dir,
+                    [
+                        Note("2018-02-03_04-05-06.txt", tmp_dir),
+                        Label("zaire", tmp_dir)
+                    ]
+                )
+            )
+
+    def test_reconcile_parse_action(self):
+        valid = {
+            "e": Reconcile.Action.EDIT,
+            "edit": Reconcile.Action.EDIT,
+            "n": Reconcile.Action.NEXT,
+            "next": Reconcile.Action.NEXT,
+            "s": Reconcile.Action.SKIP,
+            "skip": Reconcile.Action.SKIP,
+            "q": Reconcile.Action.QUIT,
+            "quit": Reconcile.Action.QUIT
+        }
+        for name, action in valid.items():
+            self.assertEqual(action, Reconcile.parse_action(name))
+
+        with self.assertRaises(TagError) as e:
+            Reconcile.parse_action("")
+        self.assertEqual(TagError.EXIT_BAD_NAME, e.exception.exit_status)
+
+        with self.assertRaises(TagError) as e:
+            Reconcile.parse_action("foo")
+        self.assertEqual(TagError.EXIT_BAD_NAME, e.exception.exit_status)
 
 
 class TestPostProcessors(TestCase):

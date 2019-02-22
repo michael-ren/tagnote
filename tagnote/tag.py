@@ -33,8 +33,10 @@ from sys import stdout, stderr, argv, exit
 from traceback import print_exc
 from typing import (
     Sequence, Iterator, Iterable, Optional, Any, TextIO, Pattern, Type, Tuple,
-    NamedTuple, Callable, Union
+    NamedTuple, Callable, Union, Mapping, MutableMapping, MutableSequence
 )
+from enum import Enum
+from filecmp import cmp
 
 
 VERSION = "3.0.1"
@@ -468,6 +470,20 @@ def valid_tag_name(
     return False
 
 
+def all_non_tags(directory: Path) -> Iterator[Path]:
+    try:
+        directory_scan = scandir(str(directory))
+    except FileNotFoundError as e:
+        raise TagError(
+            "Directory not found: '{}'".format(directory),
+            TagError.EXIT_DIRECTORY_NOT_FOUND
+        ) from e
+    return (
+        Path(entry.path) for entry in directory_scan
+        if entry.is_file() and not valid_tag_name(entry.name)
+    )
+
+
 def all_tags(
         directory: Path, tag_type: Optional[Type[Tag]] = None
         ) -> Iterator[Tag]:
@@ -575,6 +591,25 @@ def parse_timestamp(timestamp: str) -> datetime:
             "Bad timestamp: {}".format(timestamp),
             TagError.EXIT_BAD_TIMESTAMP
         ) from e
+
+
+def parse_backup_file(name: str) -> Tuple[str, str, str]:
+    def exception() -> Exception:
+        return TagError(
+            "Bad backup file name: {}".format(name), TagError.EXIT_BAD_NAME
+        )
+
+    try:
+        tag_name, timestamp, extension = name.rsplit(".", 2)
+    except ValueError as e:
+        raise exception() from e
+    if extension != "bak" or not valid_tag_name(tag_name):
+        raise exception()
+    try:
+        parse_timestamp(timestamp)
+    except TagError as e:
+        raise exception() from e
+    return tag_name, timestamp, extension
 
 
 class Formatter(metaclass=ABCMeta):
@@ -1237,7 +1272,177 @@ class Push(Command):
                 "{}/".format(arguments.dest_directory)
             ]
         )
+
+
+class Unknown(Command):
+    NAME = "unknown"
+
+    DESCRIPTION = "Show unknown files in the notes directory."
+
+    @classmethod
+    def name(cls) -> str:
+        return cls.NAME
+
+    @classmethod
+    def description(cls) -> str:
+        return cls.DESCRIPTION
+
+    @classmethod
+    def arguments(cls, parser: ArgumentParser) -> None:
+        parser.add_argument(
+            "-r", "--relative",
+            help="Print paths relative to notes directory",
+            action="store_true"
+        )
+
+    @classmethod
+    def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
         return iter([])
+
+    @classmethod
+    def format(
+            cls,
+            tags: Iterable[Tag],
+            arguments: Namespace,
+            config: Config,
+            formatter: Type[Formatter]
+            ) -> None:
+        for path in all_non_tags(config.notes_directory):
+            path = path.resolve()
+            if arguments.relative:
+                print(path.relative_to(config.notes_directory.resolve()))
+            else:
+                print(path)
+
+
+class Reconcile(Command):
+    NAME = "reconcile"
+
+    DESCRIPTION = "Reconcile differences between backup files."
+
+    @classmethod
+    def name(cls) -> str:
+        return cls.NAME
+
+    @classmethod
+    def description(cls) -> str:
+        return cls.DESCRIPTION
+
+    @classmethod
+    def arguments(cls, parser: ArgumentParser) -> None:
+        parser.add_argument(
+            "tags", nargs="*", help="The tags to reconcile, else all"
+        )
+
+    @classmethod
+    def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
+        return iter([])
+
+    @classmethod
+    def backup_files_by_tag(
+            cls, directory: Path, tags: Optional[Iterable[Tag]] = None
+            ) -> Mapping[Tag, Sequence[Path]]:
+        by_tag = {}  # type: MutableMapping[Tag, MutableSequence[Path]]
+        if tags:
+            good_tags = set(AllTagsFrom(tags))
+        else:
+            good_tags = set()
+        for non_tag in all_non_tags(directory):
+            try:
+                tag_name, timestamp, extension = parse_backup_file(
+                    non_tag.name
+                )
+            except TagError as e:
+                if e.exit_status == TagError.EXIT_BAD_NAME:
+                    continue
+                raise
+            tag = tag_of(tag_name, directory)
+            if not good_tags or tag in good_tags:
+                if tag in by_tag:
+                    index = bisect_left(by_tag[tag], non_tag)
+                    by_tag[tag].insert(index, non_tag)
+                else:
+                    by_tag[tag] = [non_tag]
+        by_tag = OrderedDict(sorted(by_tag.items(), key=lambda t: t[0]))
+        return by_tag
+
+    class Action(Enum):
+        EDIT = 1
+        NEXT = 2
+        SKIP = 3
+        QUIT = 4
+
+    @classmethod
+    def parse_action(cls, name: str) -> "Reconcile.Action":
+        if name:
+            for action in cls.Action:
+                if action.name.lower().startswith(name):
+                    return action
+        raise TagError("Bad action: {}".format(name), TagError.EXIT_BAD_NAME)
+
+    @classmethod
+    def handle_note(
+            cls, tag: Tag, path: Path, config: Config
+            ) -> "Reconcile.Action":
+        __, timestamp, __ = parse_backup_file(path.name)
+        prompt = (
+            "{} | {} [(e)dit, (n)ext, (s)kip, (q)uit]? "
+            "".format(tag.name, timestamp)
+        )
+        while True:
+            try:
+                action = cls.parse_action(input(prompt))
+            except TagError as e:
+                if e.exit_status == TagError.EXIT_BAD_NAME:
+                    continue
+                raise
+
+            if action == cls.Action.EDIT:
+                command = [
+                    *config.diff, str(tag.path()), str(path)
+                ]
+                try:
+                    subprocess_run(command, check=True)
+                except (CalledProcessError, FileNotFoundError) as e:
+                    raise TagError(
+                        "Diff command {} failed.".format(command),
+                        TagError.EXIT_EDITOR_FAILED
+                    ) from e
+
+                if cmp(str(tag.path()), str(path), shallow=False):
+                    path.unlink()
+                    return cls.Action.NEXT
+            else:
+                return action
+
+    @classmethod
+    def format(
+            cls,
+            tags: Iterable[Tag],
+            arguments: Namespace,
+            config: Config,
+            formatter: Type[Formatter]
+            ) -> None:
+        while True:
+            tags = [
+                tag_of(tag, config.notes_directory) for tag in arguments.tags
+            ]
+            by_tag = cls.backup_files_by_tag(
+                config.notes_directory, tags
+            )
+            if not by_tag:
+                break
+
+            for tag, paths in by_tag.items():
+                for i in range(len(paths) - 1, -1, -1):
+                    path = paths[i]
+                    result = cls.handle_note(tag, path, config)
+                    if result == cls.Action.NEXT:
+                        continue
+                    if result == cls.Action.SKIP:
+                        break
+                    if result == cls.Action.QUIT:
+                        return
 
 
 COMMANDS = (
@@ -1249,7 +1454,9 @@ COMMANDS = (
     Remove,
     Import,
     Pull,
-    Push
+    Push,
+    Unknown,
+    Reconcile
 )
 
 
