@@ -32,7 +32,7 @@ from tagnote.tag import (
     tag_types, valid_tag_instance, valid_tag_name,
     argument_parser, Add, Import, parse_range, parse_order, run_order_range,
     split_timestamp, parse_timestamp, DatePattern, DateRange, run_filters,
-    parse_type)
+    parse_type, compile_regex, read_config_file)
 
 
 class TestConfig(TestCase):
@@ -100,6 +100,27 @@ class TestConfig(TestCase):
             f2 = StringIO('{"notes_directory": "hi"}')  # type: TextIO
             c1 = Config(f2)
             self.assertEqual("hi", c1.notes_directory)
+        p2 = dict(notes_directory=dict(check=bool))
+        with patch.object(Config, "PROPERTIES", new=p2):
+            f3 = StringIO('{"notes_directory": ""}')
+            with self.assertRaises(TagError) as e:
+                Config(f3)
+            self.assertEqual(
+                TagError.EXIT_CONFIG_CHECK_FAILED, e.exception.exit_status
+            )
+            self.assertTrue(str(e.exception).endswith("has an invalid value."))
+
+    def test_check_equality(self):
+        self.assertEqual(Config(), Config())
+        with patch("tagnote.tag.which", new=lambda x: True):
+            self.assertEqual(
+                Config(StringIO('{"editor": "foo", "notes_directory": "/"}')),
+                Config(StringIO('{"notes_directory": "/", "editor": "foo"}'))
+            )
+            self.assertNotEqual(
+                Config(StringIO('{"editor": "foo"}')),
+                Config(StringIO('{"editor": "bar"}'))
+            )
 
 
 class TestTag(TestCase):
@@ -302,6 +323,17 @@ class TestTag(TestCase):
         with self.assertRaises(TagError) as e:
             tag_of("todo.txt", Path())
         self.assertEqual(TagError.EXIT_BAD_NAME, e.exception.exit_status)
+
+        def bad_constructor(__, *___, **____):
+            raise TagError(
+                "arg I am dead", TagError.EXIT_UNSUPPORTED_OPERATION
+            )
+        with patch.object(Note, "__init__", new=bad_constructor):
+            with self.assertRaises(TagError) as e:
+                tag_of("todo", Path())
+            self.assertEqual(
+                TagError.EXIT_UNSUPPORTED_OPERATION, e.exception.exit_status
+            )
 
         with self.assertRaises(TagError) as e:
             tag_types(1)
@@ -853,6 +885,12 @@ class TestCommandNoUTC(TestCase):
 
 
 class TestPostProcessors(TestCase):
+    def test_compile_regex(self):
+        self.assertEqual(re_compile("."), compile_regex("."))
+        with self.assertRaises(TagError) as e:
+            compile_regex("???")
+        self.assertEqual(TagError.EXIT_BAD_REGEX, e.exception.exit_status)
+
     def test_parse_type(self):
         self.assertEqual(Note, parse_type("n"))
         self.assertEqual(Label, parse_type("l"))
@@ -1026,6 +1064,16 @@ class TestPostProcessors(TestCase):
                 )
             )
             self.assertEqual([second], range_result)
+
+    def test_read_config_file(self):
+        with TemporaryDirectory() as tmp_dir:
+            with open(str(Path(tmp_dir, "config.txt")), "w") as f:
+                f.write('{{"notes_directory": "{}"}}'.format(str(tmp_dir)))
+            config = read_config_file(Path(tmp_dir, "config.txt"))
+            self.assertEqual(Path(tmp_dir), config.notes_directory)
+        self.assertEqual(
+            Config(), read_config_file(Path(tmp_dir, "config.txt"))
+        )
 
 
 if __name__ == "__main__":

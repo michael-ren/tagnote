@@ -125,6 +125,14 @@ class Config:
 
             setattr(self, name, config_file_value or default)
 
+    def __eq__(self, other):
+        return isinstance(other, Config) \
+            and self.notes_directory == other.notes_directory \
+            and self.editor == other.editor \
+            and self.diff == other.diff \
+            and self.rsync == other.rsync \
+            and self.utc == other.utc
+
 
 class TagError(Exception):
     EXIT_USAGE = 2
