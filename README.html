@@ -363,133 +363,168 @@ ul.auto-toc {
 <div class="document" id="tagnote-minimalist-note-organization">
 <h1 class="title">Tagnote: Minimalist Note Organization</h1>
 
-<p>Replace files like &quot;asdflajsdf&quot; in vim with timestamped .txt files:</p>
-<pre class="literal-block">
-:W
-&quot;~/notes/2018-07-11_19-37-44.txt&quot; [New] *L, *C written
-</pre>
-<p>Categorize those files using arbitrarily linked labels:</p>
-<pre class="literal-block">
-$ tag add 2018-07-11_19-37-44.txt todo
-$ tag members
-todo
-$ tag members todo
-2018-07-11_19-37-44.txt
-</pre>
 <div class="section" id="installation">
 <h1>Installation</h1>
 <p>If installing from PyPI:</p>
 <pre class="literal-block">
-pip3 install tagnote
+$ pip3 install tagnote
 </pre>
 <p>If installing from source:</p>
 <pre class="literal-block">
-python3 setup.py sdist
-pip3 install -U dist/tagnote-$VERSION.$FORMAT
+$ python3 setup.py sdist
+$ pip3 install -U dist/tagnote-$VERSION.$FORMAT
 </pre>
 <p>To install the vim plugin, copy <tt class="docutils literal">tagnote.vim</tt> to the <tt class="docutils literal"><span class="pre">~/.vim/plugin</span></tt> directory, creating the directory if needed.</p>
 </div>
-<div class="section" id="note-taking">
-<h1>Note-taking</h1>
+<div class="section" id="introduction">
+<h1>Introduction</h1>
+<p>The first problem with note-taking software is you might not realize it's a note until after it's been written.</p>
+<p>Normally, notes like this would exist as a collection of text files with gibberish names in several unrelated directories. Tagnote allows you to do this:</p>
 <pre class="literal-block">
-$ vim
-A meeting was held.
-:W meeting_minutes
-&quot;~/notes/2018-07-11_19-55-08.txt&quot; [New] *L, *C written
-:q
-$
-$ vim
-A second meeting was held.
-:W meeting_minutes
-&quot;~/notes/2018-07-11_19-55-29.txt&quot; [New] *L, *C written
-:q
-$
-$ tag members meeting_minutes
-2018-07-11_19-55-08.txt
-2018-07-11_19-55-29.txt
-$ tag show meeting_minutes
-2018-07-11_19-55-29.txt
----
-A second meeting was held.
-
-***
-2018-07-11_19-55-08.txt
----
-A meeting was held.
-
-***
-$ tag -o a show meeting_minutes
-2018-07-11_19-55-08.txt
----
-A meeting was held.
-
-***
-2018-07-11_19-55-29.txt
----
-A second meeting was held.
-
-***
+:W
+&quot;~/notes/2018-07-11_19-37-44.txt&quot; [New] *L, *C written
 </pre>
+<p>There's no need to think of a name right now, and Tagnote preserves the most important metadata, the creation date, for you. There's no need to open up a separate note application, copy and paste the contents of the note, and then put the note in the right place. Tagnote is for when you want to get your idea out first and organize it later.</p>
 </div>
-<div class="section" id="todo-list">
-<h1>Todo List</h1>
+<div class="section" id="working-with-labels">
+<h1>Working with Labels</h1>
+<p>If, after the fact, you wish to add a label, you can do this:</p>
 <pre class="literal-block">
-$ vim
-- buy groceries
-:W todo
-&quot;~/notes/2018-07-11_20-06-35.txt&quot; [New] *L, *C written
-:q
-$
-$ tag last todo
-- buy groceries
-- walk around
-:wq
-$
-$ tag last todo
-- buy groceries
-- walk around
-- garden
-:W todo
-&quot;~/notes/2018-07-11_20-11-04.txt&quot; [New] *L, *C written
-:q
-$
-$ tag last todo
-- buy groceries
-- walk around
-- garden
-:q
-$ tag show todo
-2018-07-11_20-11-04.txt
----
-- buy groceries
-- walk around
-- garden
-
-***
-2018-07-11_20-06-35.txt
----
-- buy groceries
-- walk around
-
-***
+:A groceries
 </pre>
+<p>The Tagnote command can also do this if you know the name of the note:</p>
+<pre class="literal-block">
+$ tag add 2018-07-11_19-37-44.txt groceries
+</pre>
+<p>You can then open the note afterwards by label:</p>
+<pre class="literal-block">
+$ tag last groceries
+</pre>
+<p>This opens the note in a text editor. If you make changes to the note, you can either save them regularly or create a copy of the note:</p>
+<pre class="literal-block">
+:W
+&quot;~/notes/2018-07-11_19-45-04.txt&quot; [New] *L, *C written
+</pre>
+<p>This command remembers the current note's labels and applies them to the copy. When you run <tt class="docutils literal">tag last groceries</tt> again, Tagnote displays the most recent note, <tt class="docutils literal"><span class="pre">2018-07-11_19-45-04.txt</span></tt>.</p>
+<p>You can also see the previous note:</p>
+<pre class="literal-block">
+$ tag -r 1: last groceries
+</pre>
+<p>This passes the <tt class="docutils literal"><span class="pre">-r</span></tt> flag, which filters out the latest note using the slice <tt class="docutils literal">1:</tt>.</p>
+<p>Instead of switching between these two notes manually, you can see their changes by running a diff on them:</p>
+<pre class="literal-block">
+$ tag last -d groceries
+</pre>
+<p>This opens up a diff editor with the changes highlighted.</p>
 </div>
-<div class="section" id="bookmarks">
-<h1>Bookmarks</h1>
+<div class="section" id="summary-commands">
+<h1>Summary Commands</h1>
+<p>You can see all members of the <tt class="docutils literal">groceries</tt> label:</p>
 <pre class="literal-block">
-$ vim
-https://www.python.org/
-:W bookmarks
-&quot;~/notes/2018-07-11_20-15-25.txt&quot; [New] *L, *C written
-:q
-$
-$ tag -s python show bookmarks
-2018-07-11_20-15-25.txt
----
-https://www.python.org/
-
-***
+$ tag members groceries
 </pre>
+<p>This lists all members of <tt class="docutils literal">groceries</tt> in sorted order. Sorting puts the notes in chronological order because of the way Tagnote names notes.</p>
+<p>This is handy for reporting:</p>
+<pre class="literal-block">
+$ tag show groceries | less
+</pre>
+<p>This prints out the content of the notes as well as a formatted header and footer around each note. This is great for getting a summary of the material in each label. By default, <tt class="docutils literal">show</tt> puts notes in reverse chronological order.</p>
+<p>You can also get a forward chronological account:</p>
+<pre class="literal-block">
+$ tag -o a show groceries | less
+</pre>
+<p>The <tt class="docutils literal"><span class="pre">-o</span></tt> flag takes the <tt class="docutils literal">a</tt> argument which is short for &quot;ascending.&quot;</p>
+<p>You can confirm that a note is in fact a member of a label:</p>
+<pre class="literal-block">
+$ tag categories 2018-07-11_19-45-04.txt
+</pre>
+<p>This prints the labels the note is a part of, in this case <tt class="docutils literal">groceries</tt>.</p>
+<p>You can also list all top-level tags:</p>
+<pre class="literal-block">
+$ tag members
+</pre>
+<p>You'll notice that this only includes <tt class="docutils literal">groceries</tt> and not the two notes. This is because the <tt class="docutils literal">members</tt> command only lists immediate children, and since <tt class="docutils literal">groceries</tt> is now the parent of the two notes, those two notes are not members of the top level.</p>
+<p>The <tt class="docutils literal">show</tt> command works differently:</p>
+<pre class="literal-block">
+$ tag show | less
+</pre>
+<p>This lists all notes in reverse chronological order, even if they are children of another label. <tt class="docutils literal">show</tt> can also show notes from several labels:</p>
+<pre class="literal-block">
+:A foods
+
+$ tag show groceries foods
+</pre>
+<p>Even if a note is a member of several labels, <tt class="docutils literal">show</tt> shows each note only once.</p>
+</div>
+<div class="section" id="important-filters">
+<h1>Important Filters</h1>
+<p>You can also ask Tagnote to search for text inside notes directly:</p>
+<pre class="literal-block">
+$ tag -s lentils show | less
+</pre>
+<p>This only shows notes that have the text <tt class="docutils literal">lentils</tt> in them.</p>
+<p>Similarly, you can search by date range:</p>
+<pre class="literal-block">
+$ tag -t 2018-07-11_19-40: show
+</pre>
+<p>This shows notes created after 7:40 PM on July 11th, which means the command only includes the <tt class="docutils literal"><span class="pre">2018-07-11_19-45-04.txt</span></tt> note.</p>
+</div>
+<div class="section" id="dealing-with-remotes">
+<h1>Dealing with Remotes</h1>
+<p>You can back up your notes to another location:</p>
+<pre class="literal-block">
+$ tag push michael&#64;my-server:notes
+</pre>
+<p>This copies the directory containing your notes, by default <tt class="docutils literal">~/notes</tt>, to the remote location. The remote location can be anything rsync accepts as a destination. Unlike in rsync, the name you pass in the command is always the name of the immediate directory containing the notes. In this example, even if there is no trailing slash, the destination directory is never <tt class="docutils literal">notes/notes</tt>.</p>
+<p>To change the directory Tagnote stores your notes, you need to edit two files, <tt class="docutils literal"><span class="pre">~/.tag.config.json</span></tt>:</p>
+<pre class="literal-block">
+{
+...
+&quot;notes_directory&quot;: &quot;journal&quot;
+...
+}
+</pre>
+<p>and <tt class="docutils literal"><span class="pre">~/.vim/plugin/tagnote.vim</span></tt>:</p>
+<pre class="literal-block">
+...
+let TAGNOTE_NOTES_DIRECTORY = simplify($HOME . '/journal')
+...
+</pre>
+<p>This updates the notes directory in the main program as well as in the vim plugin. This doesn't move notes that already exist; use <tt class="docutils literal">tag push</tt> to copy them over.</p>
+<p>When synchronizing between several copies of the notes, sometimes you need to copy a remote source into your notes directory:</p>
+<pre class="literal-block">
+$ tag pull michael&#64;my-server:notes
+</pre>
+<p>This works the same way as <tt class="docutils literal">tag push</tt> except in the opposite direction.</p>
+<p>When there are conflicts, <tt class="docutils literal">tag push</tt> and <tt class="docutils literal">tag pull</tt> create backup files like <tt class="docutils literal"><span class="pre">2018-07-11_19-45-04.txt.2018-07-11_21-10-24.bak</span></tt>. Tagnote indicates the conflicted file and adds the timestamp when you ran <tt class="docutils literal">tag push</tt> or <tt class="docutils literal">tag pull</tt> as well as the <tt class="docutils literal">.bak</tt> extension. The new version exists as <tt class="docutils literal"><span class="pre">2018-07-11_19-45-04.txt</span></tt>, and the old version is the backup file named above.</p>
+<p>If you want to accept all changes after a <tt class="docutils literal">push</tt> or a <tt class="docutils literal">pull</tt>, simply delete all <tt class="docutils literal">.bak</tt> files:</p>
+<pre class="literal-block">
+$ find ~/notes -name '*.bak' -delete
+</pre>
+<p>If there are changes you would like to keep, Tagnote provides a wizard to incorporate changes from <tt class="docutils literal">.bak</tt> files:</p>
+<pre class="literal-block">
+$ tag reconcile
+</pre>
+<p>This prints the conflicted file and the timestamp of the backup file and then prompts for an action. You can run the diff editor to reconcile changes by choosing the <tt class="docutils literal">edit</tt> action. If you close the diff editor and the conflicted file and its backup are the same, <tt class="docutils literal">reconcile</tt> deletes the backup file. To go to the next backup file, choose the <tt class="docutils literal">next</tt> action. To go to the next conflicted file, choose <tt class="docutils literal">skip</tt>. <tt class="docutils literal">quit</tt> exits the <tt class="docutils literal">reconcile</tt> command at any point.</p>
+<p>In addition to <tt class="docutils literal">.bak</tt> files, the editor might generate other files, such as <tt class="docutils literal">.swp</tt> files, which the editor can resolve manually. To list all files that Tagnote doesn't recognize, run:</p>
+<pre class="literal-block">
+$ tag unknown
+</pre>
+<p>This prints out all such files.</p>
+</div>
+<div class="section" id="note-lifecycle">
+<h1>Note Lifecycle</h1>
+<p>You can import a pre-existing file as a note:</p>
+<pre class="literal-block">
+$ tag import asdlfkjfs.txt
+</pre>
+<p>This uses the modification time for the name of the note.</p>
+<p>You can also remove tags and associations between tags:</p>
+<pre class="literal-block">
+$ tag remove 2018-07-11_19-45-04.txt groceries
+$ tag remove 2018-07-11_19-45-04.txt
+</pre>
+<p>You must remove all associations for a tag before removing the tag itself.</p>
 </div>
 <div class="section" id="utc">
 <h1>UTC</h1>
@@ -498,6 +533,7 @@ https://www.python.org/
 {
 ...
 &quot;utc&quot;: true
+...
 }
 </pre>
 <p>Also update <tt class="docutils literal"><span class="pre">~/.vim/plugin/tagnote.vim</span></tt>:</p>

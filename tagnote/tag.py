@@ -15,6 +15,87 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+"""
+Main module for tagnote
+
+Conceptually, the program operates on a number of Tags. Tags are either
+Notes or Labels.
+
+Notes are plain-text files in the notes directory, by default ~/notes,
+with names that are the timestamps of their creation,
+e.g. 2019-12-31_23-59-59.txt. Because of the naming convention, sorting
+Notes puts them in chronological order. There is no provision for storing
+time zones, so the time zone is either that of the local time or UTC when
+utc=true in the configuration file.
+
+Labels are plain-text files with names that are alphanumeric characters,
+dashes, and underscores. The content of Labels is a sorted,
+newline-separated list of Tags that represent the members of the Label.
+
+Labels contain any sort of Tag, including other Labels, and Notes
+cannot contain any Tags. Tags can be members of as many Labels as needed.
+
+The program does not create Notes, delegating this to a text editor and a
+plugin that saves Notes in the notes directory with their timestamp.
+Currently, the only plugin that exists is for vim.
+
+This file is structured into several sections:
+
+- Base types and helper functions
+
+  - Config for managing configuration options
+  - TagError and error handling
+  - Tag and its implementations Note and Label. TAG_TYPES registers each
+    implementation for use with helper functions.
+  - Various helper functions, including tag_of(), a factory function for
+    creating Tags, all_tags(), which returns an iterator of all Tags in the
+    notes directory, and AllTagsFrom(), which does the same as all_tags except
+    from a series of starting Tags.
+  - Formatting and parsing functions and classes
+  - Date pattern classes to support searching Tags by date range
+
+- Commands, which correspond to individual sub-commands on the command line
+  and which generally return a sequence of result Tags. COMMANDS is a registry
+  of all commands available to the user.
+
+  - Add and Remove change the existence and membership of Tags in the notes
+    directory and return Tags that have changed.
+  - Members and Categories report immediate children and immediate parents,
+    respectively.
+  - Show returns a formatted report of Notes that can be piped to a pager,
+    and Last edits the chronologically last Note or diffs the last two Notes
+    of a selection of Notes, e.g. the last Note in a Tag or the last Note in
+    the notes directory.
+  - Import converts any file to a Note by copying it to the notes directory
+    directory and renaming the copy to the timestamp of the file's
+    modification time.
+  - Pull and Push use rsync to copy the notes directory elsewhere either
+    locally or remotely for backup and synchronization.
+  - Unknown and Reconcile are for dealing with the results of
+    synchronization, with Unknown listing all unknown files in the Notes
+    directory and Reconcile running a diff on the backup files that rsync
+    generates.
+
+- Post-processors for manipulating result Tags, such as sorting, slicing,
+  and filters for date range, Tag name, Tag type, and text content of Notes.
+
+- The main runtime, which in sequence:
+
+  - Parses a command and options
+  - Reads the configuration file
+  - Determines runtime configuration values
+  - Runs the command
+  - Runs post-processors on the command results
+  - Formats the result
+
+All errors that the program knows about are wrapped in TagError,
+which contains an exit_status that indicates the particular type of error
+that occurred. By default, only the message of TagError is printed as the
+program exits with the indicated exit_status. Passing "-d" to the command
+line disables this behavior and prints the full stack trace on error.
+
+"""
+
 
 from abc import ABCMeta, abstractmethod
 from argparse import ArgumentParser, Namespace

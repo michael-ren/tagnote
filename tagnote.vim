@@ -14,6 +14,8 @@
 " along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
+" tagnote.vim: Vim plugin to create and organize notes with tagnote
+
 command -nargs=* WriteAsDate :call WriteAsDate(<f-args>)
 command -nargs=* AddTagAsDate :call AddTagAsDate(<f-args>)
 
