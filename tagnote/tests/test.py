@@ -1049,6 +1049,10 @@ class TestPostProcessors(TestCase):
             with note.path().open("w") as f:
                 f.writelines(["The text to match", "is here", "on this line"])
             note.create()
+            extra_note = Note("2019-04-04_02-03-04.txt", tmp_dir)
+            with extra_note.path().open("w") as f:
+                f.write("\n")
+            extra_note.create()
             label1 = Label("test", tmp_dir)
             label1.create()
             label2 = Label("another", tmp_dir)
@@ -1056,6 +1060,7 @@ class TestPostProcessors(TestCase):
             tags.append(label1)
             tags.append(label2)
             tags.append(note)
+            tags.append(extra_note)
 
             null_result = list(
                 run_filters(
@@ -1069,7 +1074,10 @@ class TestPostProcessors(TestCase):
             search_result = list(
                 run_filters(
                     tags, Namespace(
-                        time=None, name=None, search="this line", type=None
+                        time=None,
+                        name=None,
+                        search=["this line", "here"],
+                        type=None
                     )
                 )
             )
@@ -1078,20 +1086,27 @@ class TestPostProcessors(TestCase):
             name_result = list(
                 run_filters(
                     tags, Namespace(
-                        time=None, name=".*not.*", search=None, type=None
+                        time=None,
+                        name=[".*not.*", ".*the.*"],
+                        search=None,
+                        type=None
                     )
                 )
             )
             self.assertEqual([label2], name_result)
 
+            # Month October or greater AND Day 11th or lower; OR Year is 2019
             date_range_result = list(
                 run_filters(
                     tags, Namespace(
-                        time="*-10:*-*-11", name=None, search=None, type=None
+                        time=["*-10:*-*-11", "2019"],
+                        name=None,
+                        search=None,
+                        type=None
                     )
                 )
             )
-            self.assertEqual([note], date_range_result)
+            self.assertEqual([note, extra_note], date_range_result)
 
             type_result = list(
                 run_filters(

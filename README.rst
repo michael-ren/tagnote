@@ -110,15 +110,15 @@ Important Filters
 
 You can also ask Tagnote to search for text inside notes directly::
 
-    $ tag -s lentils show | less
+    $ tag -s lentils -s kale show | less
 
-This only shows notes that have the text ``lentils`` in them.
+This only shows notes that have both the text ``lentils`` and the text ``kale`` in them.
 
 Similarly, you can search by date range::
 
-    $ tag -t 2018-07-11_19-40: show
+    $ tag -t 2018-07-11_19-40: -t 2005-*-29:2007 show
 
-This shows notes created after 7:40 PM on July 11th, which means the command only includes the ``2018-07-11_19-45-04.txt`` note.
+This shows notes created at 7:40 PM on July 11th, 2018 or later or notes created in 2005, 2006, or 2007 on the 29th, 30th, or 31st of each month, which means the command only includes the ``2018-07-11_19-45-04.txt`` note.
 
 Dealing with Remotes
 --------------------

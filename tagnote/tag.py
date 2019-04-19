@@ -1555,15 +1555,18 @@ def argument_parser() -> ArgumentParser:
     )
     parser.add_argument(
         "-t", "--time",
-        help="A date range, inclusive, to filter on, e.g. *-12 or 2018:2019"
+        action="append",
+        help="One or more date ranges, inclusive, e.g. *-12 or 2018:2019"
     )
     parser.add_argument(
         "-n", "--name",
-        help="A regex for tag names to filter on"
+        action="append",
+        help="One or more regexes all matching the tag name"
     )
     parser.add_argument(
         "-s", "--search",
-        help="A regex in the notes to filter on"
+        action="append",
+        help="One or more regexes all matching the note text"
     )
     parser.add_argument(
         "-y", "--type",
@@ -1621,28 +1624,31 @@ def run_filters(results: Iterable[Tag], args: Namespace) -> Iterator[Tag]:
     filters = []
 
     if args.time:
-        time_pattern = DateRange.from_string(args.time)
+        time_patterns = [DateRange.from_string(time) for time in args.time]
 
         def time(t: Tag) -> bool:
             if isinstance(t, Note):
-                return time_pattern.match(t.to_timestamp())
+                return any(
+                    pattern.match(t.to_timestamp())
+                    for pattern in time_patterns
+                )
             return False
 
         filters.append(time)
 
     if args.name:
-        name_pattern = compile_regex(args.name)
+        name_patterns = [compile_regex(name) for name in args.name]
 
         def name(t: Tag) -> bool:
-            return bool(name_pattern.search(t.name))
+            return all(pattern.search(t.name) for pattern in name_patterns)
 
         filters.append(name)
 
     if args.search:
-        search_pattern = compile_regex(args.search)
+        search_patterns = [compile_regex(search) for search in args.search]
 
         def search(t: Tag) -> bool:
-            return t.search_text(search_pattern)
+            return all(t.search_text(pattern) for pattern in search_patterns)
 
         filters.append(search)
 
