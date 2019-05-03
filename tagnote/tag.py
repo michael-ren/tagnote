@@ -182,8 +182,8 @@ class Config:
                 or environ.get("EDITOR") or "vim"
             ],
             constructor=lambda v: [v] if isinstance(v, str) else v,
-            check=lambda v: isinstance(v, Sequence) and which(v[0]),
-            check_string="must be a valid command"
+            check=lambda v: isinstance(v, Sequence),
+            check_string="must be a command"
         ),
         diff=dict(
             default=[environ.get("TAGNOTE_DIFF") or "vimdiff"],
@@ -1196,6 +1196,20 @@ class DateRange:
         return self.start <= other <= self.end
 
 
+def check_external_command(command: Sequence[str], purpose: str) -> None:
+    """
+    Check that a command is available on the system
+
+    :param command: The command to check
+    :param purpose: A string description of what the command is used for
+    """
+    if len(command) < 1 or which(command[0]) is None:
+        raise TagError(
+            "Could not find command for {}: {}".format(purpose, command),
+            TagError.EXIT_UNSUPPORTED_OPERATION
+        )
+
+
 class Command(metaclass=ABCMeta):
     """
     A particular command to run on the Tags
@@ -1447,14 +1461,6 @@ class Show(Command):
             cls.print(tag)
 
 
-def check_diff(diff_command: Sequence[str]) -> None:
-    if len(diff_command) < 1 or which(diff_command[0]) is None:
-        raise TagError(
-            "Could not find diff command: {}".format(diff_command),
-            TagError.EXIT_UNSUPPORTED_OPERATION
-        )
-
-
 class Last(Command):
     NAME = "last"
 
@@ -1480,6 +1486,10 @@ class Last(Command):
 
     @classmethod
     def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
+        if arguments.diff:
+            check_external_command(config.diff, "diff editor")
+        else:
+            check_external_command(config.editor, "editor")
         if arguments.tags:
             tags = AllTagsFrom(
                 (
@@ -1652,14 +1662,6 @@ class Import(Command):
         return iter(destinations)
 
 
-def check_rsync(rsync_command: Sequence[str]) -> None:
-    if len(rsync_command) < 1 or which(rsync_command[0]) is None:
-        raise TagError(
-            "Could not find rsync command: {}".format(rsync_command),
-            TagError.EXIT_UNSUPPORTED_OPERATION
-        )
-
-
 class Pull(Command):
     NAME = "pull"
 
@@ -1679,6 +1681,7 @@ class Pull(Command):
 
     @classmethod
     def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
+        check_external_command(config.rsync, "rsync")
         return iter([])
 
     @classmethod
@@ -1689,7 +1692,6 @@ class Pull(Command):
             config: Config,
             formatter: Type[Formatter]
             ) -> None:
-        check_rsync(config.rsync)
         if config.utc:
             now = datetime.utcnow()
         else:
@@ -1724,6 +1726,7 @@ class Push(Command):
 
     @classmethod
     def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
+        check_external_command(config.rsync, "rsync")
         return iter([])
 
     @classmethod
@@ -1734,7 +1737,6 @@ class Push(Command):
             config: Config,
             formatter: Type[Formatter]
             ) -> None:
-        check_rsync(config.rsync)
         if config.utc:
             now = datetime.utcnow()
         else:
