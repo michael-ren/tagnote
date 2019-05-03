@@ -264,12 +264,12 @@ class Config:
         """
         Two Configs are equal if all their options have the same value
         """
-        return isinstance(other, Config) \
-            and self.notes_directory == other.notes_directory \
-            and self.editor == other.editor \
-            and self.diff == other.diff \
-            and self.rsync == other.rsync \
-            and self.utc == other.utc
+        if isinstance(other, Config):
+            return all(
+                getattr(self, name) == getattr(other, name)
+                for name in self.PROPERTIES.keys()
+            )
+        return False
 
 
 class TagError(Exception):
