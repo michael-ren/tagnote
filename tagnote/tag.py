@@ -1835,7 +1835,7 @@ class Reconcile(Command):
             good_tags = set()
         for non_tag in all_non_tags(directory):
             try:
-                tag_name, timestamp, extension = parse_backup_file(
+                tag_name, __, __ = parse_backup_file(
                     non_tag.name
                 )
             except TagError as e:
