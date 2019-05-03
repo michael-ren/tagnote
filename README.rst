@@ -131,23 +131,9 @@ You can back up your notes to another location::
 
     $ tag push michael@my-server:notes
 
-This copies the directory containing your notes, by default ``~/notes``, to the remote location. The remote location can be anything rsync accepts as a destination. Unlike in rsync, the name you pass in the command is always the name of the immediate directory containing the notes. In this example, even if there is no trailing slash, the destination directory is never ``notes/notes``.
+This copies the directory containing your notes, by default ``~/notes``, to the remote location. The remote location can be anything ``rsync`` accepts as a destination. Unlike in ``rsync``, the name you pass in the command is always the name of the immediate directory containing the notes. In this example, even if there is no trailing slash, the destination directory is never ``notes/notes``.
 
-To change the directory Tagnote stores your notes, you need to edit two files, ``~/.tag.config.json``::
-
-    {
-    ...
-    "notes_directory": "journal"
-    ...
-    }
-
-and ``~/.vim/plugin/tagnote.vim``::
-
-    ...
-    let TAGNOTE_NOTES_DIRECTORY = simplify($HOME . '/journal')
-    ...
-
-This updates the notes directory in the main program as well as in the vim plugin. This doesn't move notes that already exist; use ``tag push`` to copy them over.
+To change the directory Tagnote stores your notes, see the `Configuration`_ section below. This doesn't move notes that already exist; use ``tag push`` to copy them over before changing the directory.
 
 When synchronizing between several copies of the notes, sometimes you need to copy a remote source into your notes directory::
 
@@ -189,20 +175,72 @@ You can also remove tags and associations between tags::
 
 You must remove all associations for a tag before removing the tag itself.
 
-UTC
----
+Configuration
+-------------
 
-By default, notes use local time for timestamps. To use UTC, update ``~/.tag.config.json``::
+Tagnote uses a configuration file for various options. By default, the configuration file exists at ``~/.tag.config.json``. You can change this by passing a different value to the ``-c`` flag on the command line::
+
+    tag -c ~/other-tag.config.json ...
+
+The configuration file is a JSON object that maps string configuration options to configuration values.
+
+By default, the notes directory is at ``~/notes``. To change the notes directory, use the ``notes_directory`` option::
 
     {
     ...
-    "utc": true
+    "notes_directory": "Documents/notes",
+    ...
+    }
+
+Note that the value of ``notes_directory`` is relative to the home directory.
+
+Be sure to also update ``~/.vim/plugin/tagnote.vim``::
+
+    ...
+    let TAGNOTE_NOTES_DIRECTORY = simplify($HOME . '/Documents/notes')
+    ...
+
+By default, the editor is ``vim`` with no arguments. To change the editor, use the ``editor`` option::
+
+    {
+    ...
+    "editor": ["vim", "-n"],
+    ...
+    }
+
+You can also set the editor using environment variables. In order, Tagnote prioritizes ``TAGNOTE_EDITOR``, then ``VISUAL``, and then ``EDITOR``. You cannot pass editor command arguments using environment variables, and the value in the configuration file takes priority over the environment variables.
+
+Similarly, the default diff editor is ``vimdiff`` with no arguments. To change the editor, use the ``diff`` option::
+
+    {
+    ...
+    "diff": ["meld"],
+    ...
+    }
+
+You can also set the diff editor using the ``TAGNOTE_DIFF`` environment variable. You cannot pass diff editor command arguments using environment variables, and the value in the configuration file takes priority over the environment variable.
+
+By default, the rsync program is ``rsync``. To change the rsync command, use the ``rsync`` option::
+
+    {
+    ...
+    "rsync": ["/usr/local/bin/rsync"],
+    ...
+    }
+
+The ``TAGNOTE_RSYNC`` environment variable also sets the rsync command and is lower priority than the value in the configuration file.
+
+By default, notes use local time for timestamps. To use UTC, update the config file::
+
+    {
+    ...
+    "utc": true,
     ...
     }
 
 Also update ``~/.vim/plugin/tagnote.vim``::
 
     ...
-    let UTC = 1
+    let TAGNOTE_UTC = 1
     ...
 
