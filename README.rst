@@ -12,7 +12,11 @@ If installing from source::
     $ python3 setup.py sdist
     $ pip3 install -U dist/tagnote-$VERSION.$FORMAT
 
-To install the vim plugin, copy ``tagnote.vim`` to the ``~/.vim/plugin`` directory, creating the directory if needed.
+To create and edit notes, Tagnote needs a text editor with an appropriate plugin. Currently, Tagnote only supports ``vim``, so you will need to make sure that ``vim`` is installed.
+
+To install the ``vim`` plugin, copy ``tagnote.vim`` to the ``~/.vim/plugin`` directory, creating the directory if needed.
+
+For synchronizing notes, Tagnote requires the ``rsync`` command. Install ``rsync`` if you need to synchronize notes.
 
 Introduction
 ------------
