@@ -374,7 +374,9 @@ $ pip3 install tagnote
 $ python3 setup.py sdist
 $ pip3 install -U dist/tagnote-$VERSION.$FORMAT
 </pre>
-<p>To install the vim plugin, copy <tt class="docutils literal">tagnote.vim</tt> to the <tt class="docutils literal"><span class="pre">~/.vim/plugin</span></tt> directory, creating the directory if needed.</p>
+<p>To create and edit notes, Tagnote needs a text editor with an appropriate plugin. Currently, Tagnote only supports <tt class="docutils literal">vim</tt>, so you will need to make sure that <tt class="docutils literal">vim</tt> is installed.</p>
+<p>To install the <tt class="docutils literal">vim</tt> plugin, copy <tt class="docutils literal">tagnote.vim</tt> to the <tt class="docutils literal"><span class="pre">~/.vim/plugin</span></tt> directory, creating the directory if needed.</p>
+<p>For synchronizing notes, Tagnote requires the <tt class="docutils literal">rsync</tt> command. Install <tt class="docutils literal">rsync</tt> if you need to synchronize notes.</p>
 </div>
 <div class="section" id="introduction">
 <h1>Introduction</h1>
@@ -400,13 +402,13 @@ $ tag add 2018-07-11_19-37-44.txt groceries
 <pre class="literal-block">
 $ tag last groceries
 </pre>
-<p>This opens the note in a text editor. If you make changes to the note, you can either save them regularly or create a copy of the note:</p>
+<p>This opens the note in a text editor. If you make changes to the note, you can either save them normally or create a copy of the note:</p>
 <pre class="literal-block">
 :W
 &quot;~/notes/2018-07-11_19-45-04.txt&quot; [New] *L, *C written
 </pre>
 <p>This command remembers the current note's labels and applies them to the copy. When you run <tt class="docutils literal">tag last groceries</tt> again, Tagnote displays the most recent note, <tt class="docutils literal"><span class="pre">2018-07-11_19-45-04.txt</span></tt>.</p>
-<p>You can also see the previous note:</p>
+<p>You can also edit the previous note:</p>
 <pre class="literal-block">
 $ tag -r 1: last groceries
 </pre>
@@ -460,14 +462,14 @@ $ tag show groceries foods
 <h1>Important Filters</h1>
 <p>You can also ask Tagnote to search for text inside notes directly:</p>
 <pre class="literal-block">
-$ tag -s lentils show | less
+$ tag -s lentils -s kale show | less
 </pre>
-<p>This only shows notes that have the text <tt class="docutils literal">lentils</tt> in them.</p>
+<p>This only shows notes that have both the text <tt class="docutils literal">lentils</tt> and the text <tt class="docutils literal">kale</tt> in them.</p>
 <p>Similarly, you can search by date range:</p>
 <pre class="literal-block">
-$ tag -t 2018-07-11_19-40: show
+$ tag -t 2018-07-11_19-40: -t 2005-*-29:2007 show
 </pre>
-<p>This shows notes created after 7:40 PM on July 11th, which means the command only includes the <tt class="docutils literal"><span class="pre">2018-07-11_19-45-04.txt</span></tt> note.</p>
+<p>This shows notes created at 7:40 PM on July 11th, 2018 or later or notes created in 2005, 2006, or 2007 on the 29th, 30th, or 31st of each month, which means the command only includes the <tt class="docutils literal"><span class="pre">2018-07-11_19-45-04.txt</span></tt> note.</p>
 </div>
 <div class="section" id="dealing-with-remotes">
 <h1>Dealing with Remotes</h1>
@@ -475,22 +477,8 @@ $ tag -t 2018-07-11_19-40: show
 <pre class="literal-block">
 $ tag push michael&#64;my-server:notes
 </pre>
-<p>This copies the directory containing your notes, by default <tt class="docutils literal">~/notes</tt>, to the remote location. The remote location can be anything rsync accepts as a destination. Unlike in rsync, the name you pass in the command is always the name of the immediate directory containing the notes. In this example, even if there is no trailing slash, the destination directory is never <tt class="docutils literal">notes/notes</tt>.</p>
-<p>To change the directory Tagnote stores your notes, you need to edit two files, <tt class="docutils literal"><span class="pre">~/.tag.config.json</span></tt>:</p>
-<pre class="literal-block">
-{
-...
-&quot;notes_directory&quot;: &quot;journal&quot;
-...
-}
-</pre>
-<p>and <tt class="docutils literal"><span class="pre">~/.vim/plugin/tagnote.vim</span></tt>:</p>
-<pre class="literal-block">
-...
-let TAGNOTE_NOTES_DIRECTORY = simplify($HOME . '/journal')
-...
-</pre>
-<p>This updates the notes directory in the main program as well as in the vim plugin. This doesn't move notes that already exist; use <tt class="docutils literal">tag push</tt> to copy them over.</p>
+<p>This copies the directory containing your notes, by default <tt class="docutils literal">~/notes</tt>, to the remote location. The remote location can be anything <tt class="docutils literal">rsync</tt> accepts as a destination. Unlike in <tt class="docutils literal">rsync</tt>, the name you pass in the command is always the name of the immediate directory containing the notes. In this example, even if there is no trailing slash, the destination directory is never <tt class="docutils literal">notes/notes</tt>.</p>
+<p>To change the directory Tagnote stores your notes, see the <a class="reference internal" href="#configuration">Configuration</a> section below. This doesn't move notes that already exist; use <tt class="docutils literal">tag push</tt> to copy them over before changing the directory.</p>
 <p>When synchronizing between several copies of the notes, sometimes you need to copy a remote source into your notes directory:</p>
 <pre class="literal-block">
 $ tag pull michael&#64;my-server:notes
@@ -506,7 +494,7 @@ $ find ~/notes -name '*.bak' -delete
 $ tag reconcile
 </pre>
 <p>This prints the conflicted file and the timestamp of the backup file and then prompts for an action. You can run the diff editor to reconcile changes by choosing the <tt class="docutils literal">edit</tt> action. If you close the diff editor and the conflicted file and its backup are the same, <tt class="docutils literal">reconcile</tt> deletes the backup file. To go to the next backup file, choose the <tt class="docutils literal">next</tt> action. To go to the next conflicted file, choose <tt class="docutils literal">skip</tt>. <tt class="docutils literal">quit</tt> exits the <tt class="docutils literal">reconcile</tt> command at any point.</p>
-<p>In addition to <tt class="docutils literal">.bak</tt> files, the editor might generate other files, such as <tt class="docutils literal">.swp</tt> files, which the editor can resolve manually. To list all files that Tagnote doesn't recognize, run:</p>
+<p>In addition to <tt class="docutils literal">.bak</tt> files, the editor might generate other files, such as <tt class="docutils literal">.swp</tt> files, that the editor must resolve manually. To list all files that Tagnote doesn't recognize, run:</p>
 <pre class="literal-block">
 $ tag unknown
 </pre>
@@ -526,20 +514,67 @@ $ tag remove 2018-07-11_19-45-04.txt
 </pre>
 <p>You must remove all associations for a tag before removing the tag itself.</p>
 </div>
-<div class="section" id="utc">
-<h1>UTC</h1>
-<p>By default, notes use local time for timestamps. To use UTC, update <tt class="docutils literal"><span class="pre">~/.tag.config.json</span></tt>:</p>
+<div class="section" id="configuration">
+<h1>Configuration</h1>
+<p>Tagnote uses a configuration file for various options. By default, the configuration file exists at <tt class="docutils literal"><span class="pre">~/.tag.config.json</span></tt>. You can change this by passing a different value to the <tt class="docutils literal"><span class="pre">-c</span></tt> flag on the command line:</p>
+<pre class="literal-block">
+tag -c ~/other-tag.config.json ...
+</pre>
+<p>The configuration file is a JSON object that maps string configuration options to configuration values.</p>
+<p>By default, the notes directory is at <tt class="docutils literal">~/notes</tt>. To change the notes directory, use the <tt class="docutils literal">notes_directory</tt> option:</p>
 <pre class="literal-block">
 {
 ...
-&quot;utc&quot;: true
+&quot;notes_directory&quot;: &quot;Documents/notes&quot;,
+...
+}
+</pre>
+<p>Note that the value of <tt class="docutils literal">notes_directory</tt> is relative to the home directory.</p>
+<p>Be sure to also update <tt class="docutils literal"><span class="pre">~/.vim/plugin/tagnote.vim</span></tt>:</p>
+<pre class="literal-block">
+...
+let TAGNOTE_NOTES_DIRECTORY = simplify($HOME . '/Documents/notes')
+...
+</pre>
+<p>By default, the editor is <tt class="docutils literal">vim</tt> with no arguments. To change the editor, use the <tt class="docutils literal">editor</tt> option:</p>
+<pre class="literal-block">
+{
+...
+&quot;editor&quot;: [&quot;vim&quot;, &quot;-n&quot;],
+...
+}
+</pre>
+<p>You can also set the editor using environment variables. In order, Tagnote prioritizes <tt class="docutils literal">TAGNOTE_EDITOR</tt>, then <tt class="docutils literal">VISUAL</tt>, and then <tt class="docutils literal">EDITOR</tt>. You cannot pass editor command arguments using environment variables, and the value in the configuration file takes priority over the environment variables.</p>
+<p>Similarly, the default diff editor is <tt class="docutils literal">vimdiff</tt> with no arguments. To change the editor, use the <tt class="docutils literal">diff</tt> option:</p>
+<pre class="literal-block">
+{
+...
+&quot;diff&quot;: [&quot;meld&quot;],
+...
+}
+</pre>
+<p>You can also set the diff editor using the <tt class="docutils literal">TAGNOTE_DIFF</tt> environment variable. You cannot pass diff editor command arguments using environment variables, and the value in the configuration file takes priority over the environment variable.</p>
+<p>By default, the rsync program is <tt class="docutils literal">rsync</tt>. To change the rsync command, use the <tt class="docutils literal">rsync</tt> option:</p>
+<pre class="literal-block">
+{
+...
+&quot;rsync&quot;: [&quot;/usr/local/bin/rsync&quot;],
+...
+}
+</pre>
+<p>The <tt class="docutils literal">TAGNOTE_RSYNC</tt> environment variable also sets the rsync command and is lower priority than the value in the configuration file.</p>
+<p>By default, notes use local time for timestamps. To use UTC, update the config file:</p>
+<pre class="literal-block">
+{
+...
+&quot;utc&quot;: true,
 ...
 }
 </pre>
 <p>Also update <tt class="docutils literal"><span class="pre">~/.vim/plugin/tagnote.vim</span></tt>:</p>
 <pre class="literal-block">
 ...
-let UTC = 1
+let TAGNOTE_UTC = 1
 ...
 </pre>
 </div>
