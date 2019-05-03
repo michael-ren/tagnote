@@ -330,7 +330,7 @@ class TagError(Exception):
         self.exit_status = exit_status
 
 
-class Tag:
+class Tag(metaclass=ABCMeta):
     """
     The base unit in Tagnote, providing a common interface for both Notes and
     Labels.
