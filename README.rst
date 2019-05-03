@@ -41,14 +41,14 @@ You can then open the note afterwards by label::
 
     $ tag last groceries
 
-This opens the note in a text editor. If you make changes to the note, you can either save them regularly or create a copy of the note::
+This opens the note in a text editor. If you make changes to the note, you can either save them normally or create a copy of the note::
 
     :W
     "~/notes/2018-07-11_19-45-04.txt" [New] *L, *C written
 
 This command remembers the current note's labels and applies them to the copy. When you run ``tag last groceries`` again, Tagnote displays the most recent note, ``2018-07-11_19-45-04.txt``.
 
-You can also see the previous note::
+You can also edit the previous note::
 
     $ tag -r 1: last groceries
 
@@ -163,7 +163,7 @@ If there are changes you would like to keep, Tagnote provides a wizard to incorp
 
 This prints the conflicted file and the timestamp of the backup file and then prompts for an action. You can run the diff editor to reconcile changes by choosing the ``edit`` action. If you close the diff editor and the conflicted file and its backup are the same, ``reconcile`` deletes the backup file. To go to the next backup file, choose the ``next`` action. To go to the next conflicted file, choose ``skip``. ``quit`` exits the ``reconcile`` command at any point.
 
-In addition to ``.bak`` files, the editor might generate other files, such as ``.swp`` files, which the editor can resolve manually. To list all files that Tagnote doesn't recognize, run::
+In addition to ``.bak`` files, the editor might generate other files, such as ``.swp`` files, that the editor must resolve manually. To list all files that Tagnote doesn't recognize, run::
 
     $ tag unknown
 
