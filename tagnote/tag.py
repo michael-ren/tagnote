@@ -1891,7 +1891,7 @@ class Reconcile(Command):
         """
         __, timestamp, __ = parse_backup_file(path.name)
         prompt = (
-            "{} | {} [(e)dit, (n)ext, (s)kip, (q)uit]? "
+            "Tag: {} | Version: {} [(e)dit, (n)ext, (s)kip, (q)uit]? "
             "".format(tag.name, timestamp)
         )
         while True:
