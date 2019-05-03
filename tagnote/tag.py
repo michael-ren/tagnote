@@ -123,6 +123,52 @@ VERSION = "4.0.0"
 
 
 class Config:
+    """
+    The configuration for tagnote
+
+    The PROPERTIES field defines all valid configuration options. This class
+    either populates the values by default or reads values from a JSON file.
+    The JSON file contains a flat object with the option name as the key and
+    the option value as the value. For instance, {"foo": 1} sets the
+    option named "foo" to 1.
+
+    The following options are available:
+
+    - notes_directory -- The string path relative to the home directory for the
+        directory containing the notes, by default ["notes"], i.e. ~/notes
+    - editor -- An array of strings describing the name of the editor and any
+        arguments to pass to it, by default ["vim"]
+    - diff -- An array of strings describing the name of the diff editor and
+        any arguments to pass to it, by default ["vimdiff"]
+    - rsync -- An array of strings describing the name of the rsync command and
+        any arguments to pass to it, by default ["rsync"]
+    - utc -- Whether to interpret timestamps as UTC or not, by default false
+
+    If not set in the configuration file, the following environment variables
+    set options:
+
+    - TAGNOTE_EDITOR, VISUAL, and EDITOR -- In order of precedence, these set
+        the editor command. Passing arguments is not supported.
+    - TAGNOTE_DIFF -- This sets the diff editor command. Passing arguments is
+        not supported.
+    - TAGNOTE_RSYNC -- This sets the rsync command. Passing arguments is not
+        supported.
+
+    Each option definition in PROPERTIES is a dict with the following keys:
+
+    - default -- The default value of the option. The value specified here gets
+        passed through the constructor before being used, no differently than
+        if it had been specified in the config file.
+    - constructor -- A function that processes the raw option value before the
+        option gets used.
+    - check -- A boolean-returning function to run on the constructed value. If
+        the result is False, this class raises a TagError with an
+        EXIT_CONFIG_REQUIRED_PROPERTY status.
+    - check_string -- A string description of the reason the check failed
+    """
+    # NOTE: If you add a new option to PROPERTIES, also add a stub with a type
+    #       definition in the constructor to help with IDE auto-completion and
+    #       type checking.
     PROPERTIES = dict(
         notes_directory=dict(
             default=Path("notes"),
@@ -159,6 +205,13 @@ class Config:
     )
 
     def __init__(self, file: Optional[TextIO] = None) -> None:
+        """
+        Create a Config instance, optionally parsing a config file, and make
+        options available as fields.
+
+        :param file: The file-like object for the configuration file, if any
+        :raises TagError: For an error populating a configuration option
+        """
         self.notes_directory = None  # type: Optional[Path]
         self.editor = None  # type: Optional[Sequence[str]]
         self.diff = None  # type: Optional[Sequence[str]]
@@ -208,6 +261,9 @@ class Config:
             setattr(self, name, config_file_value or default)
 
     def __eq__(self, other):
+        """
+        Two Configs are equal if all their options have the same value
+        """
         return isinstance(other, Config) \
             and self.notes_directory == other.notes_directory \
             and self.editor == other.editor \
@@ -217,6 +273,10 @@ class Config:
 
 
 class TagError(Exception):
+    """
+    An error running Tagnote. TagError wraps all expected exceptions, adding an
+    exit status that explains why the error happened.
+    """
     EXIT_USAGE = 2
 
     EXIT_CONFIG_REQUIRED_PROPERTY = 11
@@ -260,12 +320,31 @@ class TagError(Exception):
     EXIT_BAD_DATE_RANGE = 37
 
     def __init__(self, message: str, exit_status: int) -> None:
+        """
+        Create a TagError with a message and an exit status
+
+        :param message: The message explaining the error
+        :param exit_status: The exit status, e.g. TagError.EXIT_USAGE
+        """
         super().__init__(message)
         self.exit_status = exit_status
 
 
 class Tag:
+    """
+    The base unit in Tagnote, providing a common interface for both Notes and
+    Labels.
+    """
     def __init__(self, name: str, directory: Path) -> None:
+        """
+        Create a Tag. Different naming schemes distinguish Tags from each
+        other, and the constructor checks that the caller follows the scheme
+        for a particular type of Tag.
+
+        :param name: The name identifying the Tag
+        :param directory: The directory containing the Tag
+        :raises TagError: If ``name`` is not valid for a Tag of this type
+        """
         if not self.match(name):
             raise TagError(
                 "'{}' is not a valid {}".format(name, self.tag_type()),
@@ -321,20 +400,47 @@ class Tag:
 
     @classmethod
     def match(cls, name: str) -> bool:
+        """
+        Check whether this is a valid name for a particular type of tag
+
+        :param name: The name to check
+        :return: Whether the name is valid
+        """
         return bool(cls.pattern().match(name))
 
     def path(self) -> Path:
+        """
+        Get the path to the tag
+
+        :return: The path
+        """
         return Path(self.directory, self.name)
 
     def exists(self) -> bool:
+        """
+        Report on the existence of this tag
+
+        :return: True if the tag exists, otherwise False
+        """
         return self.path().is_file()
 
     def check_exists(self) -> bool:
+        """
+        Raise an exception if the tag doesn't exist
+
+        :raises TagError: If the tag doesn't exist
+        :return: True if the tag exists
+        """
         if not self.exists():
             raise self.not_exists_error()
         return True
 
     def categories(self) -> Iterator["Tag"]:
+        """
+        Get the Tags this Tag is a member of
+
+        :return: An Iterator of parent Tags
+        """
         self.check_exists()
         matches = (
             tag for tag in all_tags(self.directory)
@@ -345,39 +451,85 @@ class Tag:
     @classmethod
     @abstractmethod
     def tag_type(cls) -> str:
+        """
+        Get the canonical name for this type of Tag
+
+        :return: The canonical name
+        """
         pass
 
     @classmethod
     @abstractmethod
     def pattern(cls) -> Pattern:
+        """
+        Get the regex pattern that matches the names of Tags of this type
+
+        :return: The pattern
+        """
         pass
 
     @abstractmethod
     def create(self) -> bool:
+        """
+        Create the tag
+
+        :return: True if the Tag doesn't already exist, False otherwise
+        """
         pass
 
     @abstractmethod
     def not_exists_error(self) -> TagError:
+        """
+        Generate an exception for if the Tag doesn't exist
+
+        :return: The exception
+        """
         pass
 
     @abstractmethod
     def add_member(self, tag: "Tag") -> bool:
+        """
+        Add a child to this Tag
+
+        :param tag: The child to add
+        :return: True if the child needed to be added, False otherwise
+        """
         pass
 
     @abstractmethod
     def remove_member(self, tag: "Tag") -> bool:
+        """
+        Remove a child from this Tag
+
+        :param tag: The child to remove
+        :return: True if the child needed to be removed, False otherwise
+        """
         pass
 
     @abstractmethod
     def members(self) -> Iterator["Tag"]:
+        """
+        Get the members of this Tag
+
+        :return: An iterator of the members
+        """
         pass
 
     @abstractmethod
     def search_text(self, pattern: Pattern) -> bool:
+        """
+        Check if the text of the Tag contains a pattern
+
+        :param pattern: The pattern
+        :return: True if the text matches, False otherwise
+        """
         pass
 
 
 class Note(Tag):
+    """
+    A Tag representing text content contained in a file
+    """
     TAG_TYPE = "note"
 
     PATTERN = compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}.txt$")
@@ -391,6 +543,12 @@ class Note(Tag):
         return cls.PATTERN
 
     def create(self) -> bool:
+        """
+        Notes cannot be created directly; they already exist.
+
+        :raises TagError: If the Note doesn't already exist
+        :return: False, since no new note has been created
+        """
         self.check_exists()
         return False
 
@@ -401,18 +559,34 @@ class Note(Tag):
         )
 
     def add_member(self, tag: "Tag") -> bool:
+        """
+        Notes cannot have children.
+
+        :raises TagError: Always
+        """
         raise TagError(
             "Cannot add members to a note",
             TagError.EXIT_UNSUPPORTED_OPERATION
         )
 
     def remove_member(self, tag: "Tag") -> bool:
+        """
+        Notes cannot have children to remove.
+
+        :raises TagError: Always
+        """
         raise TagError(
             "Cannot remove members from a note",
             TagError.EXIT_UNSUPPORTED_OPERATION
         )
 
     def members(self) -> Iterator["Tag"]:
+        """
+        Notes cannot have children to return.
+
+        :raises TagError: If the note doesn't exist
+        :return: An empty iterator
+        """
         self.check_exists()
         return iter([])
 
@@ -426,14 +600,30 @@ class Note(Tag):
 
     @classmethod
     def from_timestamp(cls, timestamp: datetime, directory: Path) -> "Note":
+        """
+        Create a representation of a Note from a timestamp instead of a string
+        name.
+
+        :param timestamp: The timestamp
+        :param directory: The directory containing the file
+        :return: The Note
+        """
         name = "{}.txt".format(format_timestamp(timestamp))
         return cls(name, directory)
 
     def to_timestamp(self) -> datetime:
+        """
+        Return the timestamp of the Note
+
+        :return: The timestamp
+        """
         return parse_timestamp(Path(self.name).stem)
 
 
 class Label(Tag):
+    """
+    A Tag containing other Tags in order
+    """
     TAG_TYPE = "label"
 
     PATTERN = compile(r"^[\w-]+$")
@@ -497,6 +687,11 @@ class Label(Tag):
         )
 
     def search_text(self, pattern: Pattern) -> bool:
+        """
+        Labels do not have text to search, so no pattern would match.
+
+        :return: False
+        """
         return False
 
 
@@ -504,6 +699,13 @@ TAG_TYPES = (Note, Label)
 
 
 def tag_of(value: str, directory: Path) -> Tag:
+    """
+    Create a Tag, choosing the right type based on the format of the name
+
+    :param value: The name of the Tag
+    :param directory: The directory of the Tag
+    :return: The new Tag
+    """
     for type_ in TAG_TYPES:
         try:
             return type_(value, directory)
@@ -518,6 +720,13 @@ def tag_of(value: str, directory: Path) -> Tag:
 
 
 def tag_types(tag_type: Optional[Type[Tag]] = None) -> Tuple[Type[Tag]]:
+    """
+    Return some or all types of Tag, checking that all returned values are in
+    fact Tag types
+
+    :param tag_type: The type of Tag to return
+    :return: The types of Tag that match
+    """
     if tag_type is not None:
         if tag_type not in TAG_TYPES:
             raise TagError(
@@ -533,6 +742,13 @@ def tag_types(tag_type: Optional[Type[Tag]] = None) -> Tuple[Type[Tag]]:
 def valid_tag_instance(
         instance: Tag, tag_type: Optional[Type[Tag]] = None
         ) -> bool:
+    """
+    Check that a Tag is a valid Tag instance, optionally of a certain type
+
+    :param instance: The Tag to check
+    :param tag_type: The type to check for
+    :return: If the Tag is valid Tag, optionally of the right type
+    """
     types = tag_types(tag_type)
     for type_ in types:
         if isinstance(instance, type_):
@@ -543,6 +759,13 @@ def valid_tag_instance(
 def valid_tag_name(
         name: str, tag_type: Optional[Type[Tag]] = None
         ) -> bool:
+    """
+    Check that a string is a valid name for a Tag, optionally of the right type
+
+    :param name: The string to check
+    :param tag_type: The Tag type to check for
+    :return: Whether the string is a valid name
+    """
     types = tag_types(tag_type)
     for type_ in types:
         if type_.match(name):
@@ -551,6 +774,12 @@ def valid_tag_name(
 
 
 def all_non_tags(directory: Path) -> Iterator[Path]:
+    """
+    Return all files in a directory that are not Tags
+
+    :param directory: The directory
+    :return: An iterator of files that are not Tags
+    """
     try:
         directory_scan = scandir(str(directory))
     except FileNotFoundError as e:
@@ -567,6 +796,13 @@ def all_non_tags(directory: Path) -> Iterator[Path]:
 def all_tags(
         directory: Path, tag_type: Optional[Type[Tag]] = None
         ) -> Iterator[Tag]:
+    """
+    Return all Tags in a directory
+
+    :param directory: The directory to check
+    :param tag_type: The type of Tag to return
+    :return: The Tags in the directory
+    """
     try:
         directory_scan = scandir(str(directory))
     except FileNotFoundError as e:
@@ -581,11 +817,21 @@ def all_tags(
 
 
 class AllTagsFrom(Iterator):
+    """
+    An iterator to return all Tags from a series of starting Tags, recursively
+    retrieving children of the starting Tags
+    """
     def __init__(
             self,
             categories: Iterable[Tag],
             tag_type: Optional[Type[Tag]] = None
             ) -> None:
+        """
+        Create an iterator for all Tags from a series of starting Tags
+
+        :param categories: The starting points
+        :param tag_type: The type of Tag to return
+        """
         self.categories = categories
         self.tag_type = tag_type
         self.visited = set()
@@ -605,6 +851,15 @@ class AllTagsFrom(Iterator):
 
 
 def left_pad(text: str, length: int, padding: str) -> str:
+    """
+    Pad text from the left to a certain length
+
+    :param text: The text to pad
+    :param length: The length to pad to
+    :param padding: The padding to use
+    :raises ValueError: If the padding is invalid or the text is too long
+    :return: The padded text
+    """
     if len(padding) != 1:
         raise ValueError(
             "Only single-character padding supported: '{}'".format(padding)
@@ -618,6 +873,12 @@ def left_pad(text: str, length: int, padding: str) -> str:
 
 
 def format_timestamp(timestamp: datetime) -> str:
+    """
+    Turn a datetime into a formatted, Tag-compatible timestamp string
+
+    :param timestamp: The timestamp to use
+    :return: The formatted string
+    """
     name = (
         "{year}-{month}-{day}_{hour}-{minute}-{second}".format(
             year=left_pad(str(timestamp.year), 4, "0"),
@@ -632,6 +893,12 @@ def format_timestamp(timestamp: datetime) -> str:
 
 
 def split_timestamp(timestamp: str) -> Sequence[str]:
+    """
+    Split a string as if it were a Tag-compatible timestamp
+
+    :param timestamp: The string to split as a timestamp
+    :return: The pieces of the timestamp
+    """
     delimiters = ["-", "-", "_", "-", "-"]
     split = deque([timestamp])  # type: deque
 
@@ -663,6 +930,12 @@ def split_timestamp(timestamp: str) -> Sequence[str]:
 
 
 def parse_timestamp(timestamp: str) -> datetime:
+    """
+    Parse a Tag-compatible formatted string as a datetime
+
+    :param timestamp: The formatted string
+    :return: The datetime
+    """
     split = split_timestamp(timestamp)
     try:
         return datetime(*[int(i) for i in split])
@@ -674,6 +947,12 @@ def parse_timestamp(timestamp: str) -> datetime:
 
 
 def parse_backup_file(name: str) -> Tuple[str, str, str]:
+    """
+    Parse a backup file, e.g. for rsync transfers
+
+    :param name: The file name to parse
+    :return: The pieces of the backup file name
+    """
     def exception() -> Exception:
         return TagError(
             "Bad backup file name: {}".format(name), TagError.EXIT_BAD_NAME
@@ -693,17 +972,34 @@ def parse_backup_file(name: str) -> Tuple[str, str, str]:
 
 
 class Formatter(metaclass=ABCMeta):
+    """
+    A class for printing a series of items to console
+    """
     PADDING = 20
 
     @classmethod
     @abstractmethod
     def format(cls, items: Iterable[str]) -> None:
+        """
+        Print the items to console
+
+        :param items: The items to print
+        """
         pass
 
 
 class MultipleColumn(Formatter):
+    """
+    A formatter that outputs in multiple columns, reading top-down and then
+    left-to-right
+    """
     @classmethod
     def format(cls, items: Iterable[str]) -> None:
+        """
+        Format the items in multiple columns, top-down and then left-to-right
+
+        :param items: The items to print
+        """
         all_items = tuple(items)
         if not all_items:
             return
@@ -729,13 +1025,28 @@ class MultipleColumn(Formatter):
 
 
 class SingleColumn(Formatter):
+    """
+    A formatter that prints items one-per-line
+    """
     @classmethod
     def format(cls, items: Iterable[str]) -> None:
+        """
+        Format the items one line at a time
+
+        :param items: The items to print
+        """
         for item in items:
             print(item, file=stdout)
 
 
 class DatePattern:
+    """
+    A pattern of dates, represented as a fixed-length series of date
+    components, any of which may be None to indicate that any value matches.
+
+    This DatePattern compares to other DatePatterns and also datetime objects
+    using the standard comparison operators.
+    """
     WILDCARD = "*"
 
     Pattern = NamedTuple(
@@ -751,6 +1062,11 @@ class DatePattern:
     )
 
     def __init__(self, *elements: Optional[int]) -> None:
+        """
+        Create a DatePattern from a series of date elements
+
+        :param elements: The date elements
+        """
         if len(elements) > 6:
             raise TagError(
                 "Too many elements in date pattern: {}".format(elements),
@@ -774,6 +1090,14 @@ class DatePattern:
 
     @classmethod
     def from_string(cls, pattern: str) -> "DatePattern":
+        """
+        Create a DatePattern from a string. This string is like a
+        Tag-compatible timestamp, except any component can be * to indicate any
+        value matches.
+
+        :param pattern: The string pattern
+        :return: The new DatePattern
+        """
         return cls(
             *[cls.parse_element(i) for i in split_timestamp(pattern)]
         )
@@ -826,12 +1150,28 @@ class DatePattern:
 
 
 class DateRange:
+    """
+    Two DatePatterns indicating the start and end of a range of time.
+    """
     def __init__(self, start: DatePattern, end: DatePattern) -> None:
+        """
+        Create a DateRange
+
+        :param start: The starting pattern
+        :param end: The ending pattern
+        """
         self.start = start
         self.end = end
 
     @classmethod
     def from_string(cls, range_: str) -> "DateRange":
+        """
+        Create a DateRange from a string pattern, which is two DatePatterns
+        separated by a colon.
+
+        :param range_: The string pattern
+        :return: The DateRange
+        """
         elements = range_.split(":")
         if len(elements) == 1:
             elements.append(elements[0])
@@ -846,32 +1186,69 @@ class DateRange:
         return cls(start, end)
 
     def match(self, other: Union[DatePattern, datetime]) -> bool:
+        """
+        Check that a DatePattern or datetime is within the range of the
+        DateRange. The check is inclusive on both the start and the end.
+
+        :param other: The DatePattern or datetime
+        :return: Whether the DatePattern or datetime are within range
+        """
         return self.start <= other <= self.end
 
 
 class Command(metaclass=ABCMeta):
+    """
+    A particular command to run on the Tags
+    """
     @classmethod
     @abstractmethod
     def name(cls) -> str:
+        """
+        Get the name of the command
+
+        :return: The name
+        """
         pass
 
     @classmethod
     @abstractmethod
     def description(cls) -> str:
+        """
+        Get the description of the command
+
+        :return: The description
+        """
         pass
 
     @classmethod
     @abstractmethod
     def arguments(cls, parser: ArgumentParser) -> None:
+        """
+        Add any arguments this particular command has
+
+        :param parser: The ArgumentParser to add arguments to
+        """
         pass
 
     @classmethod
     def default_sort_order(cls) -> Optional[bool]:
+        """
+        The default order results are sorted in for this command
+
+        :return: None if no order, True if ascending, False if descending
+        """
         return True
 
     @classmethod
     @abstractmethod
     def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
+        """
+        Run the command, doing any work to generate result Tags.
+
+        :param arguments: The command-line arguments
+        :param config: The configuration to use
+        :return: An Iterator of result Tags
+        """
         pass
 
     @classmethod
@@ -882,6 +1259,14 @@ class Command(metaclass=ABCMeta):
             config: Config,
             formatter: Type[Formatter]
             ) -> None:
+        """
+        Process the result Tags and show the result to the user.
+
+        :param tags: The result Tags
+        :param arguments: The command-line arguments
+        :param config: The configuration to use
+        :param formatter: The formatter to use
+        """
         formatter.format(t.name for t in tags)
 
 
@@ -1039,6 +1424,11 @@ class Show(Command):
 
     @classmethod
     def print(cls, member: Tag) -> None:
+        """
+        Print the contents of a file with a header and a footer
+
+        :param member: The Tag to print contents for
+        """
         with member.path().open() as f:
             print(cls.HEADER.format(member.name), end="")
             for line in f:
@@ -1216,6 +1606,12 @@ class Import(Command):
 
     @classmethod
     def stat(cls, path: Path) -> stat_result:
+        """
+        Get the stat file metadata of a particular file
+
+        :param path: The path to get metadata about
+        :return: The stat metadata
+        """
         try:
             stat = path.stat()
         except FileNotFoundError as e:
@@ -1422,6 +1818,14 @@ class Reconcile(Command):
     def backup_files_by_tag(
             cls, directory: Path, tags: Optional[Iterable[Tag]] = None
             ) -> Mapping[Tag, Sequence[Path]]:
+        """
+        Get all backup files, organized by the Tag the backup file belongs to.
+
+        :param directory: The directory to search
+        :param tags: The Tags to get backup files for
+        :return: An ordered mapping of Tags to sorted sequences of backup file
+                 paths
+        """
         by_tag = {}  # type: MutableMapping[Tag, MutableSequence[Path]]
         if tags:
             good_tags = set(AllTagsFrom(tags))
@@ -1447,6 +1851,9 @@ class Reconcile(Command):
         return by_tag
 
     class Action(Enum):
+        """
+        An action to take during reconciliation
+        """
         EDIT = 1
         NEXT = 2
         SKIP = 3
@@ -1454,6 +1861,12 @@ class Reconcile(Command):
 
     @classmethod
     def parse_action(cls, name: str) -> "Reconcile.Action":
+        """
+        Parse the action from a string
+
+        :param name: The string action
+        :return: The action to take
+        """
         if name:
             for action in cls.Action:
                 if action.name.lower().startswith(name):
@@ -1464,6 +1877,16 @@ class Reconcile(Command):
     def handle_note(
             cls, tag: Tag, path: Path, config: Config
             ) -> "Reconcile.Action":
+        """
+        Present a user interface for reconciling a backup file to a Tag,
+        running the diff program and removing the backup file if all changes
+        are reconciled.
+
+        :param tag: The Tag to reconcile
+        :param path: The backup file path
+        :param config: The configuration to use
+        :return: The next action to take
+        """
         __, timestamp, __ = parse_backup_file(path.name)
         prompt = (
             "{} | {} [(e)dit, (n)ext, (s)kip, (q)uit]? "
@@ -1541,6 +1964,11 @@ COMMANDS = (
 
 
 def argument_parser() -> ArgumentParser:
+    """
+    Construct the command-line arguments of the program
+
+    :return: The ArgumentParser for the program
+    """
     parser = ArgumentParser()
     parser.add_argument(
         "-c", "--config",
@@ -1603,6 +2031,12 @@ def argument_parser() -> ArgumentParser:
 
 
 def compile_regex(pattern: str) -> Pattern:
+    """
+    Wrap regex compilation in a TagError if it fails
+
+    :param pattern: The string pattern to compile
+    :return: The regex Pattern
+    """
     try:
         regex = compile(pattern)
     except re_error as e:
@@ -1613,6 +2047,12 @@ def compile_regex(pattern: str) -> Pattern:
 
 
 def parse_type(type_: str) -> Type[Tag]:
+    """
+    Parse a Tag type passed as a string
+
+    :param type_: The string type
+    :return: The Tag type
+    """
     if type_:
         for candidate in tag_types():
             if candidate.tag_type().startswith(type_):
@@ -1621,6 +2061,13 @@ def parse_type(type_: str) -> Type[Tag]:
 
 
 def run_filters(results: Iterable[Tag], args: Namespace) -> Iterator[Tag]:
+    """
+    Run all applicable filters on the results of a Command
+
+    :param results: The results to filter
+    :param args: The command-line arguments
+    :return: An Iterator with Tags filtered
+    """
     filters = []
 
     if args.time:
@@ -1671,6 +2118,12 @@ def run_filters(results: Iterable[Tag], args: Namespace) -> Iterator[Tag]:
 
 
 def parse_order(value: str) -> Optional[bool]:
+    """
+    Parse a sort order passed as a string
+
+    :param value: The string order
+    :return: None for no order, True for ascending, False for descending
+    """
     if value:
         if "ascending".startswith(value):
             return True
@@ -1685,6 +2138,12 @@ def parse_order(value: str) -> Optional[bool]:
 
 
 def parse_range(text: str) -> slice:
+    """
+    Parse a range passed as a string
+
+    :param text: The string range
+    :return: A slice
+    """
     if not text.strip():
         raise TagError("Empty range", TagError.EXIT_BAD_RANGE)
     components = text.split(":")
@@ -1723,6 +2182,14 @@ def run_order_range(
         args: Namespace,
         default_sort_order: Optional[bool] = None
         ) -> Iterator[Tag]:
+    """
+    Order and slice the results of a Command
+
+    :param results: The Tags to order and slice
+    :param args: The command-line arguments
+    :param default_sort_order: The sort order
+    :return: An Iterator of ordered and sliced Tags
+    """
     order = default_sort_order
     if args.order:
         order = parse_order(args.order)
@@ -1738,6 +2205,12 @@ def run_order_range(
 
 
 def read_config_file(path: Path) -> Config:
+    """
+    Populate the configuration, optionally from a config file
+
+    :param path: The path to the config file
+    :return: The Config
+    """
     try:
         with path.open() as file:
             config = Config(file)
@@ -1747,6 +2220,11 @@ def read_config_file(path: Path) -> Config:
 
 
 def run(args: Sequence[str]) -> None:
+    """
+    Run the program.
+
+    :param args: The command-line arguments
+    """
     parser = argument_parser()
     args = parser.parse_args(args)
 
