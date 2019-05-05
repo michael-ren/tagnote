@@ -14,9 +14,11 @@ If installing from source::
 
 To create and edit notes, Tagnote needs a text editor with an appropriate plugin. Currently, Tagnote only supports ``vim``, so you will need to make sure that ``vim`` is installed.
 
-To install the ``vim`` plugin, copy ``tagnote.vim`` to the ``~/.vim/plugin`` directory, creating the directory if needed.
+To install the ``vim`` plugin, copy tagnote.vim_ to the ``~/.vim/plugin`` directory, creating the directory if needed.
 
 For synchronizing notes, Tagnote requires the ``rsync`` command. Install ``rsync`` if you need to synchronize notes.
+
+.. _tagnote.vim: https://raw.githubusercontent.com/michael-ren/tagnote/v4.1.0/tagnote.vim
 
 Introduction
 ------------

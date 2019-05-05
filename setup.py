@@ -12,6 +12,7 @@ setup(
     long_description=readme,
     author="Michael Ren",
     author_email="michael.ren@mailbox.org",
+    url="https://github.com/michael-ren/tagnote",
     packages=["tagnote"],
     python_requires=">=3.5",
     license="GPLv3",
