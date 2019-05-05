@@ -119,7 +119,7 @@ from enum import Enum
 from filecmp import cmp
 
 
-VERSION = "4.1.0"
+VERSION = "4.1.1"
 
 
 class Config:
