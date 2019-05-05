@@ -2,6 +2,7 @@
 /.idea
 /*.egg-info
 /venv
+/build
 __pycache__
 .coverage
 htmlcov
