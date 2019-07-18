@@ -117,6 +117,7 @@ from typing import (
 )
 from enum import Enum
 from filecmp import cmp
+from textwrap import indent as textwrap_indent, fill as textwrap_fill
 
 
 VERSION = "4.1.1"
@@ -1416,6 +1417,22 @@ class Show(Command):
     @classmethod
     def arguments(cls, parser: ArgumentParser) -> None:
         parser.add_argument(
+            "-i", "--indent",
+            nargs="?",
+            type=int,
+            const=10,
+            default=0,
+            help="Indent output by a certain number of characters"
+        )
+        parser.add_argument(
+            "-w", "--width",
+            nargs="?",
+            type=int,
+            const=70,
+            default=0,
+            help="The max line length"
+        )
+        parser.add_argument(
             "tags", nargs="*", help="The tags to combine, else all"
         )
 
@@ -1437,17 +1454,44 @@ class Show(Command):
             return all_tags(config.notes_directory, Note)
 
     @classmethod
-    def print(cls, member: Tag) -> None:
+    def print(
+            cls,
+            member: Tag,
+            indent_str: str = "",
+            width: int = 0
+            ) -> None:
         """
         Print the contents of a file with a header and a footer
 
         :param member: The Tag to print contents for
+        :param indent_str: The text of the indentation to add to each line
+        :param width: The max line length
         """
         with member.path().open() as f:
-            print(cls.HEADER.format(member.name), end="")
+            print(
+                textwrap_indent(
+                    cls.HEADER.format(member.name), indent_str
+                ),
+                end=""
+            )
             for line in f:
+                if width:
+                    line = textwrap_fill(
+                        line,
+                        width=width,
+                        break_long_words=False,
+                        break_on_hyphens=False,
+                        replace_whitespace=False,
+                        drop_whitespace=False
+                    )
+                line = textwrap_indent(line, indent_str)
                 print(line, end="")
-            print(cls.FOOTER, end="")
+            print(
+                textwrap_indent(
+                    cls.FOOTER, indent_str
+                ),
+                end=""
+            )
 
     @classmethod
     def format(
@@ -1457,8 +1501,9 @@ class Show(Command):
             config: Config,
             formatter: Type[Formatter]
             ) -> None:
+        indent_str = " " * arguments.indent
         for tag in tags:
-            cls.print(tag)
+            cls.print(tag, indent_str=indent_str, width=arguments.width)
 
 
 class Last(Command):
