@@ -120,7 +120,7 @@ from filecmp import cmp
 from textwrap import indent as textwrap_indent, fill as textwrap_fill
 
 
-VERSION = "4.1.1"
+VERSION = "4.2.0"
 
 
 class Config:
