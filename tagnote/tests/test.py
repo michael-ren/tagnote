@@ -1169,20 +1169,21 @@ class TestPostProcessors(TestCase):
         r5 = parse_range("5:")
         self.assertIsInstance(r5, slice)
         self.assertEqual(5, r5.start)
-        self.assertEqual(-1, r5.stop)
+        self.assertEqual(None, r5.stop)
         self.assertEqual(None, r5.step)
 
         r6 = parse_range("1:2:")
         self.assertIsInstance(r6, slice)
         self.assertEqual(1, r6.start)
         self.assertEqual(2, r6.stop)
-        self.assertEqual(1, r6.step)
+        self.assertEqual(None, r6.step)
 
     def test_run_order_range(self):
         with TemporaryDirectory() as tmp_dir:
             tmp_dir = Path(tmp_dir)
             tags = []
-            # 2018-01-01_05-06-07.txt, something, 2017-05-05_05-05-05.txt
+            # 2018-01-01_05-06-07.txt, something, 2017-05-05_05-05-05.txt,
+            # 2019-02-02_01-02-03.txt
             first = Note("2018-01-01_05-06-07.txt", tmp_dir)
             with first.path().open("w") as f:
                 f.write("")
@@ -1193,9 +1194,14 @@ class TestPostProcessors(TestCase):
             with third.path().open("w") as f:
                 f.write("")
             third.create()
+            fourth = Note("2019-02-02_01-02-03.txt", tmp_dir)
+            with fourth.path().open("w") as f:
+                f.write("")
+            fourth.create()
             tags.append(first)
             tags.append(second)
             tags.append(third)
+            tags.append(fourth)
 
             null_result = list(
                 run_order_range(tags, Namespace(order=None, range=None))
@@ -1205,19 +1211,26 @@ class TestPostProcessors(TestCase):
             ascending_result = list(
                 run_order_range(tags, Namespace(order="asc", range=None), None)
             )
-            self.assertEqual([third, first, second], ascending_result)
+            self.assertEqual([third, first, fourth, second], ascending_result)
 
             descending_result = list(
                 run_order_range(tags, Namespace(order="desc", range=None), None)
             )
-            self.assertEqual([second, first, third], descending_result)
+            self.assertEqual([second, fourth, first, third], descending_result)
 
             range_result = list(
                 run_order_range(
-                    tags, Namespace(order="none", range="1:2")
+                    tags, Namespace(order="none", range="2:3")
                 )
             )
-            self.assertEqual([second], range_result)
+            self.assertEqual([third], range_result)
+
+            open_range_result = list(
+                run_order_range(
+                    tags, Namespace(order="none", range="3:")
+                )
+            )
+            self.assertEqual([fourth], open_range_result)
 
     def test_read_config_file(self):
         with TemporaryDirectory() as tmp_dir:

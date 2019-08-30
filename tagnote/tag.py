@@ -2214,13 +2214,13 @@ def parse_range(text: str) -> slice:
     if components[1]:
         end = try_int(components[1])
     else:
-        end = -1
+        end = None
     if len(components) == 2:
         return slice(start, end)
     if components[2]:
         step = try_int(components[2])
     else:
-        step = 1
+        step = None
     return slice(start, end, step)
 
 
