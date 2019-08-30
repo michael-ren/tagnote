@@ -1509,7 +1509,7 @@ class Show(Command):
 class Last(Command):
     NAME = "last"
 
-    DESCRIPTION = "Open the last note in a text editor."
+    DESCRIPTION = "Open the latest note in a text editor."
 
     @classmethod
     def name(cls) -> str:
@@ -1523,11 +1523,15 @@ class Last(Command):
     def arguments(cls, parser: ArgumentParser) -> None:
         parser.add_argument(
             "-d", "--diff", action="store_true",
-            help="Run the diff editor on the last two files instead"
+            help="Run the diff editor on the latest two files instead"
         )
         parser.add_argument(
             "tags", nargs="*", help="The tags to search, else all"
         )
+
+    @classmethod
+    def default_sort_order(cls) -> Optional[bool]:
+        return False
 
     @classmethod
     def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
@@ -1555,12 +1559,9 @@ class Last(Command):
             config: Config,
             formatter: Type[Formatter]
             ) -> None:
-        last = None
-        second_to_last = None
-        for tag in tags:
-            if last is None or tag > last:
-                second_to_last = last
-                last = tag
+        tags_iter = iter(tags)
+        last = next(tags_iter, None)
+        second_to_last = next(tags_iter, None)
 
         if arguments.diff and last is not None and second_to_last is not None:
             command = [
