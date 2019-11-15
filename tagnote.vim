@@ -19,9 +19,13 @@
 command -nargs=* WriteAsDate :call WriteAsDate(<f-args>)
 command -nargs=* AddTagAsDate :call AddTagAsDate(<f-args>)
 
-let TAGNOTE_NOTES_DIRECTORY = simplify($HOME . '/notes')
+if (!exists("g:TagnoteNotesDirectory"))
+  let g:TagnoteNotesDirectory = simplify($HOME . '/notes')
+endif
 
-let TAGNOTE_UTC = 0
+if (!exists("g:TagnoteUtc"))
+  let g:TagnoteUtc = 0
+endif
 
 let TAGNOTE_NOTE_REGEX = '[0-9]\{4}-[0-9]\{2}-[0-9]\{2}_[0-9]\{2}-[0-9]\{2}-[0-9]\{2}.txt'
 
@@ -35,12 +39,12 @@ function s:run_with_error_output(command, error)
 endfunction
 
 function s:is_note(directory, file)
-  return a:directory == g:TAGNOTE_NOTES_DIRECTORY
+  return a:directory == g:TagnoteNotesDirectory
       \ && a:file =~ '^' . g:TAGNOTE_NOTE_REGEX . '$'
 endfunction
 
 function WriteAsDate(...)
-  if g:TAGNOTE_UTC
+  if g:TagnoteUtc
     let filename = system('date -u +%F_%H-%M-%S.txt')
     if v:shell_error
       echo "Could not get timestamp\n\n" . l:filename
@@ -63,7 +67,7 @@ function WriteAsDate(...)
     let tags = l:tags . ' ' . shellescape(l:arg)
   endfor
 
-  execute 'saveas ' . g:TAGNOTE_NOTES_DIRECTORY . '/' . l:filename
+  execute 'saveas ' . g:TagnoteNotesDirectory . '/' . l:filename
   return s:run_with_error_output(
     \'tag -r :0 add ' . l:prototype . ' ' . l:filename . l:tags,
     \"Could not add note\n\n"
