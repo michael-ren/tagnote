@@ -18,7 +18,7 @@ To install the ``vim`` plugin, copy tagnote.vim_ to the ``~/.vim/plugin`` direct
 
 For synchronizing notes, Tagnote requires the ``rsync`` command. Install ``rsync`` if you need to synchronize notes.
 
-.. _tagnote.vim: https://raw.githubusercontent.com/michael-ren/tagnote/v4.2.2/tagnote.vim
+.. _tagnote.vim: https://raw.githubusercontent.com/michael-ren/tagnote/v4.2.3/tagnote.vim
 
 Introduction
 ------------
