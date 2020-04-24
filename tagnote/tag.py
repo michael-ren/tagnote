@@ -1790,7 +1790,7 @@ class Push(Command):
         subprocess_run(
             [
                 *config.rsync,
-                "-rtbv",
+                "-rtbvc",
                 "--suffix=.{}.bak".format(format_timestamp(now)),
                 "{}/".format(config.notes_directory),
                 "{}/".format(arguments.dest_directory)
