@@ -14,11 +14,11 @@ If installing from source::
 
 To create and edit notes, Tagnote needs a text editor with an appropriate plugin. Currently, Tagnote only supports ``vim``, so you will need to make sure that ``vim`` is installed.
 
-To install the ``vim`` plugin, copy tagnote.vim_ to the ``~/.vim/plugin`` directory, creating the directory if needed.
+To install the ``vim`` plugin, see the repository_ for instructions.
 
 For synchronizing notes, Tagnote requires the ``rsync`` command. Install ``rsync`` if you need to synchronize notes.
 
-.. _tagnote.vim: https://raw.githubusercontent.com/michael-ren/tagnote/v4.2.3/tagnote.vim
+.. _repository: https://github.com/michael-ren/tagnote-vim
 
 Introduction
 ------------
@@ -196,12 +196,6 @@ By default, the notes directory is at ``~/notes``. To change the notes directory
 
 Note that the value of ``notes_directory`` is relative to the home directory.
 
-Be sure to also update ``~/.vim/plugin/tagnote.vim``::
-
-    ...
-    let TAGNOTE_NOTES_DIRECTORY = simplify($HOME . '/Documents/notes')
-    ...
-
 By default, the editor is ``vim`` with no arguments. To change the editor, use the ``editor`` option::
 
     {
@@ -239,10 +233,3 @@ By default, notes use local time for timestamps. To use UTC, update the config f
     "utc": true,
     ...
     }
-
-Also update ``~/.vim/plugin/tagnote.vim``::
-
-    ...
-    let TAGNOTE_UTC = 1
-    ...
-
