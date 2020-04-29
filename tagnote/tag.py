@@ -2020,7 +2020,7 @@ def argument_parser() -> ArgumentParser:
     parser = ArgumentParser()
     parser.add_argument(
         "-c", "--config",
-        help="The configuration file to use",
+        help="The configuration file to use, by default ~/.tag.config.json",
         default=Path(Path.home(), ".tag.config.json"),
         type=Path
     )
