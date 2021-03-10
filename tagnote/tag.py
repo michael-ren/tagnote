@@ -2303,6 +2303,7 @@ def run(args: Sequence[str]) -> None:
     except KeyboardInterrupt:
         exit(1)
     except BrokenPipeError:
+        stderr.close()
         exit(0)
 
 
