@@ -320,6 +320,8 @@ class TagError(Exception):
 
     EXIT_BAD_DATE_RANGE = 37
 
+    EXIT_RSYNC_FAILED = 38
+
     def __init__(self, message: str, exit_status: int) -> None:
         """
         Create a TagError with a message and an exit status
@@ -1742,15 +1744,20 @@ class Pull(Command):
             now = datetime.utcnow()
         else:
             now = datetime.now()
-        subprocess_run(
-            [
-                *config.rsync,
-                "-rtbv",
-                "--suffix=.{}.bak".format(format_timestamp(now)),
-                "{}/".format(arguments.source_directory),
-                "{}/".format(config.notes_directory)
-            ]
-        )
+        command = [
+            *config.rsync,
+            "-rtbvc",
+            "--suffix=.{}.bak".format(format_timestamp(now)),
+            "{}/".format(arguments.source_directory),
+            "{}/".format(config.notes_directory)
+        ]
+        try:
+            subprocess_run(command, check=True)
+        except (CalledProcessError, FileNotFoundError) as e:
+            raise TagError(
+                "Rsync command {} failed.".format(command),
+                TagError.EXIT_RSYNC_FAILED
+            ) from e
 
 
 class Push(Command):
@@ -1787,15 +1794,20 @@ class Push(Command):
             now = datetime.utcnow()
         else:
             now = datetime.now()
-        subprocess_run(
-            [
-                *config.rsync,
-                "-rtbvc",
-                "--suffix=.{}.bak".format(format_timestamp(now)),
-                "{}/".format(config.notes_directory),
-                "{}/".format(arguments.dest_directory)
-            ]
-        )
+        command = [
+            *config.rsync,
+            "-rtbvc",
+            "--suffix=.{}.bak".format(format_timestamp(now)),
+            "{}/".format(config.notes_directory),
+            "{}/".format(arguments.dest_directory)
+        ]
+        try:
+            subprocess_run(command, check=True)
+        except (CalledProcessError, FileNotFoundError) as e:
+            raise TagError(
+                "Rsync command {} failed.".format(command),
+                TagError.EXIT_RSYNC_FAILED
+            ) from e
 
 
 class Unknown(Command):
