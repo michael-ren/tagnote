@@ -1656,6 +1656,10 @@ class Import(Command):
     @classmethod
     def arguments(cls, parser: ArgumentParser) -> None:
         parser.add_argument(
+            "-s", "--swapfile", action="store_true",
+            help="Treat the imported files as vim swapfiles"
+        )
+        parser.add_argument(
             "files",
             nargs="+",
             help="The text files to import",
@@ -1686,6 +1690,16 @@ class Import(Command):
 
     @classmethod
     def run(cls, arguments: Namespace, config: Config) -> Iterator[Tag]:
+        if arguments.swapfile:
+            check_external_command(config.editor, "editor")
+            if "vim" not in config.editor[0]:
+                raise TagError(
+                    (
+                        "Asked to import swapfile,"
+                        " but config.editor {} does not look like vim"
+                    ).format(config.editor),
+                    TagError.EXIT_UNSUPPORTED_OPERATION
+                )
         destinations = []
         for path in arguments.files:
             stat = cls.stat(path)
@@ -1699,13 +1713,29 @@ class Import(Command):
                     "Note already exists: '{}'".format(note),
                     TagError.EXIT_NOTE_EXISTS
                 )
-            try:
-                copy2(str(path), str(note))
-            except PermissionError as e:
-                raise TagError(
-                    "Could not write to file: '{}'".format(note),
-                    TagError.EXIT_BAD_PERMISSIONS
-                ) from e
+            if arguments.swapfile:
+                command = [
+                    *config.editor,
+                    "-u", "NONE",
+                    "-r", path,
+                    "-c", "w {}".format(str(note)),
+                    "-c", "q"
+                ]
+                try:
+                    subprocess_run(command, check=True)
+                except (CalledProcessError, FileNotFoundError) as e:
+                    raise TagError(
+                        "Editor command {} failed.".format(command),
+                        TagError.EXIT_EDITOR_FAILED
+                    ) from e
+            else:
+                try:
+                    copy2(str(path), str(note))
+                except PermissionError as e:
+                    raise TagError(
+                        "Could not write to file: '{}'".format(note),
+                        TagError.EXIT_BAD_PERMISSIONS
+                    ) from e
             destinations.append(note)
         return iter(destinations)
 
